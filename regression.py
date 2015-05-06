@@ -1,22 +1,10 @@
 #! /usr/bin/python
 
-import sklearn.datasets
+
 import sklearn.linear_model
-import numpy.random
 import numpy.linalg
 import matplotlib.pyplot as plot
-
-def load_data(data_sets, train_sample_ratio):
-    size = len(data_sets.target)
-    train_sample_size = int(size * train_sample_ratio)
-    shuffle_idx = range(size)
-    numpy.random.shuffle(shuffle_idx)
-    train_features = data_sets.data[shuffle_idx[:train_sample_size]]
-    train_targets  = data_sets.target[shuffle_idx[:train_sample_size]]
-    test_features  = data_sets.data[shuffle_idx[train_sample_size:]]
-    test_targets   = data_sets.target[shuffle_idx[train_sample_size:]]
-    return train_features, train_targets, test_features, test_targets
-
+from data_loader import SKLearnData
 
 def linear_regression(train_features, train_targets, test_features, test_targets):
     # Train
@@ -116,8 +104,9 @@ def logistic_regression(train_features, train_targets, test_features, test_targe
     plot.show()
 
 def boston_test():
-    boston_data = sklearn.datasets.load_boston()
-    boston_train_features, boston_train_targets, boston_test_features, boston_test_targets = load_data(boston_data, 0.5)
+    data_loader = SKLearnData()
+    boston_data = data_loader.load_boston()
+    boston_train_features, boston_train_targets, boston_test_features, boston_test_targets = data_loader.load_data(boston_data, 0.5)
     print 'Testing regression using Boston data now ...'
     linear_regression(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
     elastic_net(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
@@ -125,17 +114,18 @@ def boston_test():
     ridge(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
     print 'Polynomina Linear Regression (Degree = 2)'
     polynomina_data = sklearn.preprocessing.PolynomialFeatures(degree=2).fit_transform(boston_data.data)
-    polynomina_boston_train_features, polynomina_boston_train_targets, polynomina_boston_test_features, polynomina_boston_test_targets = load_data(boston_data, 0.5)
+    polynomina_boston_train_features, polynomina_boston_train_targets, polynomina_boston_test_features, polynomina_boston_test_targets = data_loader.load_data(boston_data, 0.5)
     linear_regression(polynomina_boston_train_features, boston_train_targets, polynomina_boston_test_features, boston_test_targets)
     print 'Testing Boston data completed'
 
 def iris_test():
-    iris_data = sklearn.datasets.load_iris()
+    data_loader = SKLearnData()
+    iris_data = data_loader.load_iris()
     print 'Testing regression using Iris data now ...'
-    iris_train_features, iris_train_targets, iris_test_features, iris_test_targets = load_data(iris_data, 0.5)
+    iris_train_features, iris_train_targets, iris_test_features, iris_test_targets = data_loader.load_data(iris_data, 0.5)
     logistic_regression(iris_train_features,iris_train_targets, iris_test_features, iris_test_targets)
     print 'Testing Iris data completed'
 
 if __name__ == '__main__':
     boston_test()
-    #iris_test()
+    iris_test()
