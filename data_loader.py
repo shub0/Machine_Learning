@@ -10,7 +10,7 @@ class SKLearnData:
     def load_iris(self):
         return sklearn.datasets.load_iris()
 
-    def load_data(self, data_sets, train_sample_ratio):
+    def random_data(self, data_sets, train_sample_ratio):
         size = len(data_sets.target)
         train_sample_size = int(size * train_sample_ratio)
         shuffle_idx = range(size)

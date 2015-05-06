@@ -106,7 +106,7 @@ def logistic_regression(train_features, train_targets, test_features, test_targe
 def boston_test():
     data_loader = SKLearnData()
     boston_data = data_loader.load_boston()
-    boston_train_features, boston_train_targets, boston_test_features, boston_test_targets = data_loader.load_data(boston_data, 0.5)
+    boston_train_features, boston_train_targets, boston_test_features, boston_test_targets = data_loader.random_data(boston_data, 0.5)
     print 'Testing regression using Boston data now ...'
     linear_regression(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
     elastic_net(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
@@ -114,7 +114,7 @@ def boston_test():
     ridge(boston_train_features, boston_train_targets, boston_test_features, boston_test_targets)
     print 'Polynomina Linear Regression (Degree = 2)'
     polynomina_data = sklearn.preprocessing.PolynomialFeatures(degree=2).fit_transform(boston_data.data)
-    polynomina_boston_train_features, polynomina_boston_train_targets, polynomina_boston_test_features, polynomina_boston_test_targets = data_loader.load_data(boston_data, 0.5)
+    polynomina_boston_train_features, polynomina_boston_train_targets, polynomina_boston_test_features, polynomina_boston_test_targets = data_loader.random_data(boston_data, 0.5)
     linear_regression(polynomina_boston_train_features, boston_train_targets, polynomina_boston_test_features, boston_test_targets)
     print 'Testing Boston data completed'
 
@@ -122,7 +122,7 @@ def iris_test():
     data_loader = SKLearnData()
     iris_data = data_loader.load_iris()
     print 'Testing regression using Iris data now ...'
-    iris_train_features, iris_train_targets, iris_test_features, iris_test_targets = data_loader.load_data(iris_data, 0.5)
+    iris_train_features, iris_train_targets, iris_test_features, iris_test_targets = data_loader.random_data(iris_data, 0.5)
     logistic_regression(iris_train_features,iris_train_targets, iris_test_features, iris_test_targets)
     print 'Testing Iris data completed'
 
