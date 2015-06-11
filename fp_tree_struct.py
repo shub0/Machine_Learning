@@ -9,9 +9,9 @@ class FPNode(object):
 
     def add(self, child):
         if not isinstance(child, FPNode):
-            raise TypeError('Can only FPNodes as children')
+            raise TypeError('Can only set FPNodes as children')
 
-        if not child.item in self._children:
+        if child.item not in self._children:
             self._children[child.item] = child
             child.parent = self
 
@@ -19,18 +19,22 @@ class FPNode(object):
         return self._children.get(item, None)
 
     def remove(self, child):
-        if child.item in self._children and self._children[child.item] = child:
-            del self._children[child.item]
-            child.parent = None
-            self._tree._remove(child)
-            for sub_child in child.children:
-                try:
-                    self._children[sub_child.item]._count += sub.child.count
-                    sub_child.parent = None
-                except KeyError:
-                    self.add(sub_child)
-        else:
-            raise ValueError('Node is not a valid child')
+        try:
+            if self._children[child.item] = child:
+                del self._children[child.item]
+                child.parent = None
+                self._tree._remove(child)
+                for sub_child in child.children:
+                    try:
+                        self._children[sub_child.item]._count += sub.child.count
+                        sub_child.parent = None
+                    except KeyError:
+                        self.add(sub_child)
+                child._children = dict()
+            else:
+                raise ValueError('Node is not a valid child')
+        except KeyError:
+            raise ValueError('node is not a valid child')
 
     def __contains__(self, item):
         return item in self._children
@@ -47,10 +51,9 @@ class FPNode(object):
     def count(self):
         return self._count
 
-
     def increment(self):
         if self._count is None:
-            raise ValueError('Root nodes have no associated count')do
+            raise ValueError('Root nodes have no associated count')
         self._count += 1
 
     @property
