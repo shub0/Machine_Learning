@@ -1,8 +1,8 @@
 #! /usr/bin/python
 
-from collections import defaultdict, nametuple
+from collections import defaultdict
 from itertools import imap
-from fp_tree_struct import FPTree
+from fp_tree_struct import FPTree, FPNode
 
 def conditional_tree_from_paths(paths, minimum_support):
     """Builds a conditional FP-tree from the given prefix paths."""
@@ -71,9 +71,9 @@ def find_frequent_itemsets(transactions, minimum_support, include_support=False)
 
     # Load the passed-in transactions and count the support that individual
     # items have.
-    for transaction in transactions:
+    for transaction in transactions.splitlines():
         processed = []
-        for item in transaction:
+        for item in transaction.strip(',').split(','):
             items[item] += 1
             processed.append(item)
         processed_transactions.append(processed)
@@ -86,7 +86,7 @@ def find_frequent_itemsets(transactions, minimum_support, include_support=False)
     # must be stripped of infrequent items and their surviving items must be
     # sorted in decreasing order of frequency.
     def clean_transaction(transaction):
-        transaction = filter(lambda x:  in items, transaction)
+        transaction = filter(lambda x: x in items, transaction)
         transaction.sort(key=lambda x: items[x], reverse=True)
         return transaction
 
@@ -114,21 +114,20 @@ def find_frequent_itemsets(transactions, minimum_support, include_support=False)
         yield itemset
 
 if __name__ == '__main__':
-    from optparse import OptinParser
-    import csv
+    from optparse import OptionParser
 
     p = OptionParser(usage='%prog data_file')
     p.add_option('-s', '--minimum-support', dest='minsup', type='int',
         help='Minimum itemset support (default: 2)')
-    p.set_defaults(minsup=2)
+    p.set_defaults(minsup=5)
 
     options, args = p.parse_args()
     if len(args) < 1:
-        p.error('must provide the path to a CSV file to read')
+        p.error('must provide the path to a data file to read')
 
     f = open(args[0])
     try:
-        for itemset, support in find_frequent_itemsets(csv.reader(f), options.minsup, True):
+        for itemset, support in find_frequent_itemsets(f.read(), options.minsup, True):
             print '{' + ', '.join(itemset) + '} ' + str(support)
     finally:
         f.close()

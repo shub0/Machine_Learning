@@ -1,3 +1,4 @@
+from collections import defaultdict, namedtuple
 class FPNode(object):
     def __init__(self, tree, item, count=1):
         self._tree = tree
@@ -20,13 +21,13 @@ class FPNode(object):
 
     def remove(self, child):
         try:
-            if self._children[child.item] = child:
+            if self._children[child.item] is child:
                 del self._children[child.item]
                 child.parent = None
                 self._tree._remove(child)
                 for sub_child in child.children:
                     try:
-                        self._children[sub_child.item]._count += sub.child.count
+                        self._children[sub_child.item]._count += sub_child.count
                         sub_child.parent = None
                     except KeyError:
                         self.add(sub_child)
@@ -82,7 +83,7 @@ class FPNode(object):
         def fget(self):
             return self._neighbor
         def fset(self, value):
-            if value is not None and isinstance(value, FPNode):
+            if value is not None and not isinstance(value, FPNode):
                 raise TypeError('A node must be an FPNode as a neighbor')
             if value and value.tree is not self.tree:
                 raise ValueError('Cannot have a neighbor from another tree')
@@ -125,7 +126,7 @@ class FPTree(object):
                 next_point = FPNode(self, item)
                 point.add(next_point)
                 # update the route of nodes that contains this item to include the new node
-                self._update_rount(next_point)
+                self._update_route(next_point)
             point = next_point
 
     def _update_route(self, point):
@@ -173,7 +174,7 @@ class FPTree(object):
         head, tail = self._routes[node.item]
         if node is head:
             if node is tail or not node.neighbor:
-                def self._routes[node.item]
+                del self._routes[node.item]
             else:
                 self._routes[node.item] = self.Route(node.neighbor, tail)
         else:
