@@ -3,6 +3,9 @@
 from collections import defaultdict
 from itertools import imap
 from fp_tree_struct import FPTree, FPNode
+import logging
+import os
+import time
 
 def conditional_tree_from_paths(paths, minimum_support):
     """Builds a conditional FP-tree from the given prefix paths."""
@@ -54,24 +57,16 @@ def conditional_tree_from_paths(paths, minimum_support):
 
     return tree
 
-def find_frequent_itemsets(transactions, minimum_support, include_support=False):
-    """
-    Find frequent itemsets in the given transactions using FP-growth. This
-    function returns a generator instead of an eagerly-populated list of items.
-    The `transactions` parameter can be any iterable of iterables of items.
-    `minimum_support` should be an integer specifying the minimum number of
-    occurrences of an itemset for it to be accepted.
-    Each item must be hashable (i.e., it must be valid as a member of a
-    dictionary or a set).
-    If `include_support` is true, yield (itemset, support) pairs instead of
-    just the itemsets.
-    """
+
+def build_frequent_tree(transactions, minimum_support):
+    logging.info("Building FP tree started ...")
     items = defaultdict(lambda: 0) # mapping from items to their supports
     processed_transactions = []
-
+    start_time = time.time()
     # Load the passed-in transactions and count the support that individual
     # items have.
-    for transaction in transactions.splitlines():
+    sample = transactions.splitlines()
+    for transaction in sample:
         processed = []
         for item in transaction.strip(',').split(','):
             items[item] += 1
@@ -93,6 +88,21 @@ def find_frequent_itemsets(transactions, minimum_support, include_support=False)
     master = FPTree()
     for transaction in imap(clean_transaction, processed_transactions):
         master.add(transaction)
+    logging.info('Building FP tree completed. Mining %d samples in %d ms', len(sample), 1000*(time.time() - start_time))
+    return master
+
+def find_frequent_itemsets(master, minimum_support, include_support=False):
+    """
+    Find frequent itemsets in the given transactions using FP-growth. This
+    function returns a generator instead of an eagerly-populated list of items.
+    The `transactions` parameter can be any iterable of iterables of items.
+    `minimum_support` should be an integer specifying the minimum number of
+    occurrences of an itemset for it to be accepted.
+    Each item must be hashable (i.e., it must be valid as a member of a
+    dictionary or a set).
+    If `include_support` is true, yield (itemset, support) pairs instead of
+    just the itemsets.
+    """
 
     def find_with_suffix(tree, suffix):
         for item, nodes in tree.items():
@@ -113,21 +123,31 @@ def find_frequent_itemsets(transactions, minimum_support, include_support=False)
     for itemset in find_with_suffix(master, []):
         yield itemset
 
-if __name__ == '__main__':
+def main():
     from optparse import OptionParser
-
-    p = OptionParser(usage='%prog data_file')
+    p = OptionParser(usage='%prog --help')
     p.add_option('-s', '--minimum-support', dest='minsup', type='int',
         help='Minimum itemset support (default: 2)')
-    p.set_defaults(minsup=5)
-
+    p.set_defaults(minsup=2)
+    p.add_option('-f', '--file', dest='filename', type='string',
+        help='Data filename')
     options, args = p.parse_args()
-    if len(args) < 1:
+
+    if not options.filename :
         p.error('must provide the path to a data file to read')
 
-    f = open(args[0])
+    f = open(options.filename)
+    logging.basicConfig(filename='frequent_pattern.log',
+                        format='%(levelname)s: %(asctime)s %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S %p',
+                        level=logging.DEBUG)
     try:
-        for itemset, support in find_frequent_itemsets(f.read(), options.minsup, True):
+        minimum_support = options.minsup
+        tree = build_frequent_tree(f.read(), minimum_support)
+        for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
             print '{' + ', '.join(itemset) + '} ' + str(support)
     finally:
         f.close()
+
+if __name__ == '__main__':
+    main()
