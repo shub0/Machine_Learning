@@ -1,4 +1,5 @@
 from collections import defaultdict, namedtuple
+
 class FPNode(object):
     def __init__(self, tree, item, count=1):
         self._tree = tree

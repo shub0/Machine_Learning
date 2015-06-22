@@ -74,8 +74,7 @@ def build_frequent_tree(transactions, minimum_support):
         processed_transactions.append(processed)
 
     # Remove infrequent items from the item support dictionary.
-    items = dict((item, support) for item, support in items.iteritems()
-        if support >= minimum_support)
+    items = dict((item, support) for item, support in items.iteritems() if support >= minimum_support)
 
     # Build our FP-tree. Before any transactions can be added to the tree, they
     # must be stripped of infrequent items and their surviving items must be
@@ -85,13 +84,14 @@ def build_frequent_tree(transactions, minimum_support):
         transaction.sort(key=lambda x: items[x], reverse=True)
         return transaction
 
-    master = FPTree()
+    fp_tree = FPTree()
     for transaction in imap(clean_transaction, processed_transactions):
-        master.add(transaction)
-    logging.info('Building FP tree completed. Mining %d samples in %d ms', len(sample), 1000*(time.time() - start_time))
-    return master
+        fp_tree.add(transaction)
+    time_elapsed = 1000.0*(time.time() - start_time)
+    logging.info('Building FP tree completed. Processed %d samples in %.1f ms (%.2f ms/sample)', len(sample), time_elapsed, time_elapsed / len(sample))
+    return fp_tree
 
-def find_frequent_itemsets(master, minimum_support, include_support=False):
+def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
     """
     Find frequent itemsets in the given transactions using FP-growth. This
     function returns a generator instead of an eagerly-populated list of items.
@@ -103,7 +103,6 @@ def find_frequent_itemsets(master, minimum_support, include_support=False):
     If `include_support` is true, yield (itemset, support) pairs instead of
     just the itemsets.
     """
-
     def find_with_suffix(tree, suffix):
         for item, nodes in tree.items():
             support = sum(n.count for n in nodes)
@@ -114,13 +113,12 @@ def find_frequent_itemsets(master, minimum_support, include_support=False):
 
                 # Build a conditional tree and recursively search for frequent
                 # itemsets within it.
-                cond_tree = conditional_tree_from_paths(tree.prefix_paths(item),
-                    minimum_support)
+                cond_tree = conditional_tree_from_paths(tree.prefix_paths(item), minimum_support)
                 for s in find_with_suffix(cond_tree, found_set):
                     yield s # pass along the good news to our caller
 
     # Search for frequent itemsets, and yield the results we find.
-    for itemset in find_with_suffix(master, []):
+    for itemset in find_with_suffix(master_tree, []):
         yield itemset
 
 def main():
@@ -139,7 +137,7 @@ def main():
     f = open(options.filename)
     logging.basicConfig(filename='frequent_pattern.log',
                         format='%(levelname)s: %(asctime)s %(message)s',
-                        datefmt='%m/%d/%Y %I:%M:%S %p',
+                        datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.DEBUG)
     try:
         minimum_support = options.minsup
