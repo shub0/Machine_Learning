@@ -91,7 +91,7 @@ def build_frequent_tree(transactions, minimum_support):
     logging.info('Building FP tree completed. Processed %d samples in %.1f ms (%.2f ms/sample)', len(sample), time_elapsed, time_elapsed / len(sample))
     return fp_tree
 
-def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
+def find_with_suffix(tree, suffix, minimum_support, include_support=False):
     """
     Find frequent itemsets in the given transactions using FP-growth. This
     function returns a generator instead of an eagerly-populated list of items.
@@ -103,22 +103,23 @@ def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
     If `include_support` is true, yield (itemset, support) pairs instead of
     just the itemsets.
     """
-    def find_with_suffix(tree, suffix):
-        for item, nodes in tree.items():
-            support = sum(n.count for n in nodes)
-            if support >= minimum_support and item not in suffix:
-                # New winner!
-                found_set = [item] + suffix
-                yield (found_set, support) if include_support else found_set
+    for item, nodes in tree.items():
+        support = sum(n.count for n in nodes)
+        if support >= minimum_support and item not in suffix:
+            # New winner!
+            found_set = [item] + suffix
+            yield (found_set, support) if include_support else found_set
 
-                # Build a conditional tree and recursively search for frequent
-                # itemsets within it.
-                cond_tree = conditional_tree_from_paths(tree.prefix_paths(item), minimum_support)
-                for s in find_with_suffix(cond_tree, found_set):
-                    yield s # pass along the good news to our caller
+            # Build a conditional tree and recursively search for frequent
+            # itemsets within it.
+            cond_tree = conditional_tree_from_paths(tree.prefix_paths(item), minimum_support)
+            for s in find_with_suffix(cond_tree, found_set, minimum_support, include_support):
+                yield s # pass along the good news to our caller
 
+
+def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
     # Search for frequent itemsets, and yield the results we find.
-    for itemset in find_with_suffix(master_tree, []):
+    for itemset in find_with_suffix(master_tree, [], minimum_support, include_support):
         yield itemset
 
 def main():
@@ -142,8 +143,18 @@ def main():
     try:
         minimum_support = options.minsup
         tree = build_frequent_tree(f.read(), minimum_support)
+        """
         for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
-            print '{' + ', '.join(itemset) + '} ' + str(support)
+            print "{" + ", ".join(itemset) + "} " + str(support)
+        """
+        suffix = ["17108", "20203"]
+        logging.info("Frequent Pattern with Suffix: %s", suffix)
+        frequent_pattern = list()
+        for itemset, support in find_with_suffix(tree, suffix, minimum_support, True):
+            frequent_pattern.append((', '.join(itemset), support))
+        frequent_pattern.sort(key=lambda x: x[1], reverse=True)
+        logging.info("Found %d frequent pattern with minimum support %d", len(frequent_pattern), minimum_support)
+        print '\n'.join([ str(pattern) for pattern in frequent_pattern ])
     finally:
         f.close()
 
