@@ -12,7 +12,7 @@ Find optimal K using gap_statistics (http://web.stanford.edu/~hastie/Papers/gap.
 Ref: https://datasciencelab.wordpress.com/2013/12/27/finding-the-k-in-k-means-clustering/
 
 Alternative approach to find optimal K (http://www.ee.columbia.edu/~dpwe/papers/PhamDN05-kmeans.pdf)
-Ref: https://datasciencelab.wordpress.com/2014/01/21/selection-of-k-in-k-means-clustering-reloaded/
+Ref:  https://datasciencelab.wordpress.com/2014/01/21/selection-of-k-in-k-means-clustering-reloaded/
 """
 
 import numpy as np
@@ -94,8 +94,9 @@ class KMeans():
             y = [ point[1] for point in clusters[cluster_id] ]
             centroid_x = np.mean(x)
             centroid_y = np.mean(y)
-            plot.scatter(x, y, c=color, marker = "o", s = 10)
+            plot.scatter(x, y, c=color, marker = "o", s = 10, label="Cluster %d" % (cluster_id))
             plot.scatter(centroid_x, centroid_y, c=color, marker = "^", s = 250)
+            plot.title("Clustering")
 
 # K-means ++ algorithm
 class KPlusPlus(KMeans):
@@ -115,7 +116,8 @@ class KPlusPlus(KMeans):
             self._update_dist_from_centroids()
             self.centroid.append(self._next_centroid())
 
-class DetK(KPlusPlus):
+class OptimalK(KPlusPlus):
+    # Alternative approach
     def fk(self, this_k, skm1=0):
         X = self.X
         dimension = len(X[0])
@@ -131,6 +133,7 @@ class DetK(KPlusPlus):
             fs = sk / (a(this_k, dimension) * skm1)
         return fs, sk
 
+    # Gap statistics method
     def gap(self, this_k):
         X = self.X
         (xmin,xmax), (ymin,ymax) = self._bounding_box()
@@ -145,7 +148,7 @@ class DetK(KPlusPlus):
             for n in range(len(X)):
                 Xb.append([random.uniform(xmin,xmax), random.uniform(ymin,ymax)])
             Xb = np.array(Xb)
-            kb = DetK(X=Xb)
+            kb = OptimalK(X=Xb)
             kb.find_centroids(K = this_k)
             ms, cs = kb.centroid, kb.clusters
             BWkbs[i] = np.log(sum([np.linalg.norm(ms[j]-c)**2/(2*len(c)) for j in range(this_k) for c in cs[j]]))
@@ -154,15 +157,15 @@ class DetK(KPlusPlus):
         sk = np.sqrt(sum((BWkbs-Wkb)**2)/float(B))*np.sqrt(1+1/B)
         return Wk, Wkb, sk
 
-    def run(self, max_k, which='both'):
+    def run(self, max_k, algorithm='both'):
         ks = range(1,max_k)
         fs = [0] * len(ks)
         Wks, Wkbs, sks = [0] * (len(ks)+1), [0] * (len(ks)+1), [0] * (len(ks)+1)
         # Special case K=1
         self._init_centroid(K=1)
-        if which == 'f':
+        if algorithm == 'f':
             fs[0], Sk = self.fK(K=1)
-        elif which == 'gap':
+        elif algorithm == 'gap':
             Wks[0], Wkbs[0], sks[0] = self.gap(1)
         else:
             fs[0], Sk = self.fk(1)
@@ -170,26 +173,30 @@ class DetK(KPlusPlus):
         # Rest of Ks
         for k in ks[1:]:
             self._init_centroid(K=k)
-            if which == 'f':
+            if algorithm == 'f':
                 fs[k-1], Sk = self.fk(K=k, skm1=Sk)
-            elif which == 'gap':
+            elif algorithm == 'gap':
                 Wks[k-1], Wkbs[k-1], sks[k-1] = self.gap(k)
             else:
                 fs[k-1], Sk = self.fk(k, skm1=Sk)
                 Wks[k-1], Wkbs[k-1], sks[k-1] = self.gap(k)
-        if which == 'f':
+        if algorithm == 'f':
             self.fs = fs
-        elif which == 'gap':
+            self.fk_optimal = np.where(self.fs == min(self.fs))[0][0] + 1
+        elif algorithm == 'gap':
             G = []
             for i in range(len(ks)):
                 G.append((Wkbs[i]-Wks[i]) - ((Wkbs[i+1]-Wks[i+1]) - sks[i+1]))
             self.G = np.array(G)
+            self.gap_optimal = np.where(self.G > 0)[0][0] + 1
         else:
             self.fs = fs
+            self.fk_optimal = np.where(self.fs == min(self.fs))[0][0] + 1
             G = []
             for i in range(len(ks)):
                 G.append((Wkbs[i]-Wks[i]) - ((Wkbs[i+1]-Wks[i+1]) - sks[i+1]))
             self.G = np.array(G)
+            self.gap_optimal = np.where(self.G > 0)[0][0] + 1
 
     def visualize(self):
         X = self.X
@@ -208,19 +215,17 @@ class DetK(KPlusPlus):
         ax2.plot(ks, self.fs, 'ro-', alpha=0.6)
         ax2.set_xlabel('Number of clusters K', fontsize=16)
         ax2.set_ylabel('f(K)', fontsize=16)
-        optim_k = np.where(self.fs == min(self.fs))[0][0] + 1
-        title2 = 'f(K) finds %s clusters' % (optim_k)
+        title2 = 'f(K) finds %s clusters' % (self.fk_optimal)
         ax2.set_title(title2, fontsize=16)
         # Plot 3
         ax3 = fig.add_subplot(133)
         ax3.bar(ks, self.G, alpha=0.5, color='g', align='center')
         ax3.set_xlabel('Number of clusters K', fontsize=16)
         ax3.set_ylabel('Gap', fontsize=16)
-        optim_k = np.where(self.G > 0)[0][0] + 1
-        title3 = 'Gap statistic finds %s clusters' % (optim_k)
+        title3 = 'Gap statistic finds %s clusters' % (self.gap_optimal)
         ax3.set_title(title3, fontsize=16)
         ax3.xaxis.set_ticks(range(1,len(ks)+1))
-        fig.show()
+        plot.savefig('optimalK.png', bbox_inches='tight', dpi=100)
 
 # utils
 def init_board(N):
@@ -243,7 +248,7 @@ def init_board_gauss(N, K):
     return X
 
 def main():
-    N = 1000
+    N = 4000
     K = 3
     X = init_board_gauss(N, K)
     """
@@ -252,14 +257,14 @@ def main():
     k_means.visualize("K-means, Sample size: %d, cluters: %d" % (N, K))
     plot.show()
 
-    k_pp = KPlusPlus(X=X)
-    k_pp.find_centroids(K)
-    k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, K))
-    plot.show()
     """
-    k_means = DetK(X = X)
-    k_means.run(max_k = 2 * K)
-    k_means.visualize()
+    optimal_k = OptimalK(X = X)
+    optimal_k.run(max_k = 2 * K)
+
+    k_pp = KPlusPlus(X=X)
+    k_pp.find_centroids(K=optimal_k.gap_optimal)
+    k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, optimal_k.gap_optimal))
+    plot.show()
 
 if __name__ == "__main__":
     main()
