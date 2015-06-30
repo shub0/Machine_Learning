@@ -11,6 +11,8 @@ Ref: https://datasciencelab.wordpress.com/2014/01/15/improved-seeding-for-cluste
 Find optimal K using gap_statistics (http://web.stanford.edu/~hastie/Papers/gap.pdf)
 Ref: https://datasciencelab.wordpress.com/2013/12/27/finding-the-k-in-k-means-clustering/
 
+Alternative approach to find optimal K (http://www.ee.columbia.edu/~dpwe/papers/PhamDN05-kmeans.pdf)
+Ref: https://datasciencelab.wordpress.com/2014/01/21/selection-of-k-in-k-means-clustering-reloaded/
 """
 
 import numpy as np
@@ -21,10 +23,7 @@ import operator
 
 # Lloyd's algorithm (standard K-means)
 class KMeans():
-    def __init__(self, K=0, X=None, N=0):
-        if K == 0:
-            raise ValueError("Num clusters = 0")
-        self.K = K
+    def __init__(self, X=None, N=0):
         if X == None:
             if N == 0:
                 raise ValueError("Data size must positive")
@@ -36,8 +35,8 @@ class KMeans():
         self.centroid = None
         self.clusters = None
 
-    def _init_centroid(self):
-        self.centroid = random.sample(self.X, self.K)
+    def _init_centroid(self, K):
+        self.centroid = random.sample(self.X, K)
 
     def _cluster_points(self):
         mu = self.centroid
@@ -60,13 +59,18 @@ class KMeans():
         K = len(self.centroid)
         return(set([tuple(a) for a in self.centroid]) ==  set([tuple(a) for a in self.old_centroid])  and len(set([tuple(a) for a in self.centroid])) == K)
 
-    def find_centroids(self):
+    def _bounding_box(self):
+        X = self.X
+        xmin, xmax = min(X, key=lambda a: a[0])[0], max(X, key=lambda a: a[0])[0]
+        ymin, ymax = min(X, key=lambda a: a[1])[1], max(X, key=lambda a: a[1])[1]
+        return (xmin, xmax), (ymin, ymax)
+
+    def find_centroids(self, K):
         # Initialize to K random centers
         X = self.X
-        K = self.K
         self.old_centroid = random.sample(X, K)
         centroid = random.sample(X, K)
-        self._init_centroid()
+        self._init_centroid(K=K)
         while not self._has_converged():
             self.old_centroid = self.centroid
             # Assign all points in X to clusters
@@ -105,68 +109,118 @@ class KPlusPlus(KMeans):
         index         = np.where(self.cumprobs >= rand)[0][0]
         return self.X[index]
 
-    def _init_centroid(self):
+    def _init_centroid(self, K):
         self.centroid = random.sample(self.X, 1)
-        while len(self.centroid) < self.K:
+        while len(self.centroid) < K:
             self._update_dist_from_centroids()
             self.centroid.append(self._next_centroid())
 
-def Wk(centroids, clusters):
-    num_cluster = len(centroids)
-    dimension   = len(centroids[0])
-    return sum([ np.linalg.norm(centroids[cluster_id] - point) ** 2 / (2 * dimension) \
-                for cluster_id in range(num_cluster) for point in clusters[cluster_id] ])
+class DetK(KPlusPlus):
+    def fk(self, this_k, skm1=0):
+        X = self.X
+        dimension = len(X[0])
+        a = lambda k, dimension: 1 - 3/(4*dimension) if k== 2 \
+            else a(k-1, dimension) + (1-a(k-1, dimension)) / 6
+        self.find_centroids(this_k)
+        centroid, clusters = self.centroid, self.clusters
+        sk = sum([ np.linalg.norm(centroid[i] - point) ** 2 \
+                  for i in range(this_k) for point in clusters[i] ])
+        if this_k == 1 or skm1 ==0:
+            fs = 1
+        else:
+            fs = sk / (a(this_k, dimension) * skm1)
+        return fs, sk
 
-def bounding_box(X):
-    xmin, xmax = min(X, key=lambda a: a[0])[0], max(X, key=lambda a: a[0])[0]
-    ymin, ymax = min(X, key=lambda a: a[1])[1], max(X, key=lambda a: a[1])[1]
-    return (xmin, xmax), (ymin, ymax)
-
-def gap_statistic(X):
-    (xmin, xmax), (ymin, ymax) = bounding_box(X)
-    ks = range(1, 10)
-    Wks = [0] * len(ks)
-    Wkbs = [0] * len(ks)
-    sk = [0] * len(ks)
-    for index, k in enumerate(ks):
-        Kpp = KPlusPlus(K = k, X=X)
-        Kpp.find_centroids()
-        Wks[index] = np.log(Wk(Kpp.centroid, Kpp.clusters))
+    def gap(self, this_k):
+        X = self.X
+        (xmin,xmax), (ymin,ymax) = self._bounding_box()
+        self.find_centroids(K = this_k)
+        centroid, clusters = self.centroid, self.clusters
+        Wk = np.log(sum([np.linalg.norm(centroid[cluster_id]-c)**2/(2*len(c))  for cluster_id in range(this_k) for c in clusters[cluster_id]]))
+        # Create B reference datasets
         B = 10
         BWkbs = [0] * B
         for i in range(B):
-            Xb = list()
+            Xb = []
             for n in range(len(X)):
-                Xb.append([random.uniform(xmin, xmax), random.uniform(ymin, ymax)])
+                Xb.append([random.uniform(xmin,xmax), random.uniform(ymin,ymax)])
             Xb = np.array(Xb)
-            Kpp_ref = KPlusPlus(K=k, X=Xb)
-            Kpp_ref.find_centroids()
-            BWkbs[i] = np.log(Wk(Kpp_ref.centroid, Kpp_ref.clusters))
-        Wkbs[index] = sum(BWkbs) / B
-        sk[index] = np.sqrt(sum((BWkbs - Wkbs[index]) ** 2)/B)
-    sk = sk * np.sqrt(1+1/B)
-    return (ks, Wks, Wkbs, sk)
+            kb = DetK(X=Xb)
+            kb.find_centroids(K = this_k)
+            ms, cs = kb.centroid, kb.clusters
+            BWkbs[i] = np.log(sum([np.linalg.norm(ms[j]-c)**2/(2*len(c)) for j in range(this_k) for c in cs[j]]))
 
-def visualize_k(X):
-    ks, logWks, logWkbs, sk = gap_statistic(X)
+        Wkb = sum(BWkbs)/B
+        sk = np.sqrt(sum((BWkbs-Wkb)**2)/float(B))*np.sqrt(1+1/B)
+        return Wk, Wkb, sk
 
-    plot.subplot(3,1,1)
-    plot.title("logWk v.s. logWkb")
-    plot.plot(ks, logWks, label="logWk", c = "blue", marker = "o")
-    plot.plot(ks, logWkbs, label="logWkb", c = "red", marker = "o")
-    plot.legend()
+    def run(self, max_k, which='both'):
+        ks = range(1,max_k)
+        fs = [0] * len(ks)
+        Wks, Wkbs, sks = [0] * (len(ks)+1), [0] * (len(ks)+1), [0] * (len(ks)+1)
+        # Special case K=1
+        self._init_centroid(K=1)
+        if which == 'f':
+            fs[0], Sk = self.fK(K=1)
+        elif which == 'gap':
+            Wks[0], Wkbs[0], sks[0] = self.gap(1)
+        else:
+            fs[0], Sk = self.fk(1)
+            Wks[0], Wkbs[0], sks[0] = self.gap(1)
+        # Rest of Ks
+        for k in ks[1:]:
+            self._init_centroid(K=k)
+            if which == 'f':
+                fs[k-1], Sk = self.fk(K=k, skm1=Sk)
+            elif which == 'gap':
+                Wks[k-1], Wkbs[k-1], sks[k-1] = self.gap(k)
+            else:
+                fs[k-1], Sk = self.fk(k, skm1=Sk)
+                Wks[k-1], Wkbs[k-1], sks[k-1] = self.gap(k)
+        if which == 'f':
+            self.fs = fs
+        elif which == 'gap':
+            G = []
+            for i in range(len(ks)):
+                G.append((Wkbs[i]-Wks[i]) - ((Wkbs[i+1]-Wks[i+1]) - sks[i+1]))
+            self.G = np.array(G)
+        else:
+            self.fs = fs
+            G = []
+            for i in range(len(ks)):
+                G.append((Wkbs[i]-Wks[i]) - ((Wkbs[i+1]-Wks[i+1]) - sks[i+1]))
+            self.G = np.array(G)
 
-    plot.subplot(3,1,2)
-    gap = map(operator.sub, logWkbs, logWks)
-    plot.title("Gap")
-    plot.plot(ks, gap, marker="o")
-
-    plot.subplot(3,1,3)
-    stats = map(operator.sub, map(operator.sub, gap[:-1], gap[1:]), sk[1:])
-    plot.title("gap(k) - gap(k+1) - sk[k+1]")
-    plot.plot(ks[:-1], stats, marker="o")
-    plot.show()
-
+    def visualize(self):
+        X = self.X
+        ks = range(1, len(self.fs)+1)
+        fig = plot.figure(figsize=(18,5))
+        # Plot 1
+        ax1 = fig.add_subplot(131)
+        ax1.set_xlim(-1,1)
+        ax1.set_ylim(-1,1)
+        ax1.plot(zip(*X)[0], zip(*X)[1], '.', alpha=0.5)
+        title1 = 'N=%s' % (str(len(X)))
+        ax1.set_title(title1, fontsize=16)
+        # Plot 2
+        ax2 = fig.add_subplot(132)
+        ax2.set_ylim(0, 1.25)
+        ax2.plot(ks, self.fs, 'ro-', alpha=0.6)
+        ax2.set_xlabel('Number of clusters K', fontsize=16)
+        ax2.set_ylabel('f(K)', fontsize=16)
+        optim_k = np.where(self.fs == min(self.fs))[0][0] + 1
+        title2 = 'f(K) finds %s clusters' % (optim_k)
+        ax2.set_title(title2, fontsize=16)
+        # Plot 3
+        ax3 = fig.add_subplot(133)
+        ax3.bar(ks, self.G, alpha=0.5, color='g', align='center')
+        ax3.set_xlabel('Number of clusters K', fontsize=16)
+        ax3.set_ylabel('Gap', fontsize=16)
+        optim_k = np.where(self.G > 0)[0][0] + 1
+        title3 = 'Gap statistic finds %s clusters' % (optim_k)
+        ax3.set_title(title3, fontsize=16)
+        ax3.xaxis.set_ticks(range(1,len(ks)+1))
+        fig.show()
 
 # utils
 def init_board(N):
@@ -193,16 +247,19 @@ def main():
     K = 3
     X = init_board_gauss(N, K)
     """
-    k_means = KMeans(K=K, X=X)
-    k_means.find_centroids()
+    k_means = KMeans(X=X)
+    k_means.find_centroids(K)
     k_means.visualize("K-means, Sample size: %d, cluters: %d" % (N, K))
     plot.show()
 
-    k_pp = KPlusPlus(K=K, X=X)
-    k_pp.find_centroids()
+    k_pp = KPlusPlus(X=X)
+    k_pp.find_centroids(K)
     k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, K))
     plot.show()
     """
-    visualize_k(X)
+    k_means = DetK(X = X)
+    k_means.run(max_k = 2 * K)
+    k_means.visualize()
+
 if __name__ == "__main__":
     main()
