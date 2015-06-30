@@ -1,19 +1,29 @@
 #! /usr/bin/python
 
-import numpy as np
-import random
-import collections
-import matplotlib.pyplot as plot
 
 """
 Lloyd's algorithm
 Ref: https://datasciencelab.wordpress.com/2013/12/12/clustering-with-k-means-in-python/
+
 K-means ++ algorithm By Arthur and Vassilvitskii
+Ref: https://datasciencelab.wordpress.com/2014/01/15/improved-seeding-for-clustering-with-k-means/
+
+Find optimal K using gap_statistics (http://web.stanford.edu/~hastie/Papers/gap.pdf)
+Ref: https://datasciencelab.wordpress.com/2013/12/27/finding-the-k-in-k-means-clustering/
+
 """
+
+import numpy as np
+import random
+import collections
+import matplotlib.pyplot as plot
+import operator
 
 # Lloyd's algorithm (standard K-means)
 class KMeans():
-    def __init__(self, K, X=None, N=0):
+    def __init__(self, K=0, X=None, N=0):
+        if K == 0:
+            raise ValueError("Num clusters = 0")
         self.K = K
         if X == None:
             if N == 0:
@@ -26,8 +36,7 @@ class KMeans():
         self.centroid = None
         self.clusters = None
 
-    def init_centroid(self):
-        print "Standard Init"
+    def _init_centroid(self):
         self.centroid = random.sample(self.X, self.K)
 
     def _cluster_points(self):
@@ -57,7 +66,7 @@ class KMeans():
         K = self.K
         self.old_centroid = random.sample(X, K)
         centroid = random.sample(X, K)
-        self.init_centroid()
+        self._init_centroid()
         while not self._has_converged():
             self.old_centroid = self.centroid
             # Assign all points in X to clusters
@@ -84,6 +93,7 @@ class KMeans():
             plot.scatter(x, y, c=color, marker = "o", s = 10)
             plot.scatter(centroid_x, centroid_y, c=color, marker = "^", s = 250)
 
+# K-means ++ algorithm
 class KPlusPlus(KMeans):
     def _update_dist_from_centroids(self):
         self.D2 = np.array([ min([np.linalg.norm(x-c)**2 for c in self.centroid ]) for x in self.X ])
@@ -95,14 +105,70 @@ class KPlusPlus(KMeans):
         index         = np.where(self.cumprobs >= rand)[0][0]
         return self.X[index]
 
-    def init_centroid(self):
-        print "Initialize with K++"
+    def _init_centroid(self):
         self.centroid = random.sample(self.X, 1)
         while len(self.centroid) < self.K:
             self._update_dist_from_centroids()
             self.centroid.append(self._next_centroid())
 
+def Wk(centroids, clusters):
+    num_cluster = len(centroids)
+    dimension   = len(centroids[0])
+    return sum([ np.linalg.norm(centroids[cluster_id] - point) ** 2 / (2 * dimension) \
+                for cluster_id in range(num_cluster) for point in clusters[cluster_id] ])
 
+def bounding_box(X):
+    xmin, xmax = min(X, key=lambda a: a[0])[0], max(X, key=lambda a: a[0])[0]
+    ymin, ymax = min(X, key=lambda a: a[1])[1], max(X, key=lambda a: a[1])[1]
+    return (xmin, xmax), (ymin, ymax)
+
+def gap_statistic(X):
+    (xmin, xmax), (ymin, ymax) = bounding_box(X)
+    ks = range(1, 10)
+    Wks = [0] * len(ks)
+    Wkbs = [0] * len(ks)
+    sk = [0] * len(ks)
+    for index, k in enumerate(ks):
+        Kpp = KPlusPlus(K = k, X=X)
+        Kpp.find_centroids()
+        Wks[index] = np.log(Wk(Kpp.centroid, Kpp.clusters))
+        B = 10
+        BWkbs = [0] * B
+        for i in range(B):
+            Xb = list()
+            for n in range(len(X)):
+                Xb.append([random.uniform(xmin, xmax), random.uniform(ymin, ymax)])
+            Xb = np.array(Xb)
+            Kpp_ref = KPlusPlus(K=k, X=Xb)
+            Kpp_ref.find_centroids()
+            BWkbs[i] = np.log(Wk(Kpp_ref.centroid, Kpp_ref.clusters))
+        Wkbs[index] = sum(BWkbs) / B
+        sk[index] = np.sqrt(sum((BWkbs - Wkbs[index]) ** 2)/B)
+    sk = sk * np.sqrt(1+1/B)
+    return (ks, Wks, Wkbs, sk)
+
+def visualize_k(X):
+    ks, logWks, logWkbs, sk = gap_statistic(X)
+
+    plot.subplot(3,1,1)
+    plot.title("logWk v.s. logWkb")
+    plot.plot(ks, logWks, label="logWk", c = "blue", marker = "o")
+    plot.plot(ks, logWkbs, label="logWkb", c = "red", marker = "o")
+    plot.legend()
+
+    plot.subplot(3,1,2)
+    gap = map(operator.sub, logWkbs, logWks)
+    plot.title("Gap")
+    plot.plot(ks, gap, marker="o")
+
+    plot.subplot(3,1,3)
+    stats = map(operator.sub, map(operator.sub, gap[:-1], gap[1:]), sk[1:])
+    plot.title("gap(k) - gap(k+1) - sk[k+1]")
+    plot.plot(ks[:-1], stats, marker="o")
+    plot.show()
+
+
+# utils
 def init_board(N):
     X = np.array([ (random.uniform(-1, 1), random.uniform(-1,1)) for i in range(N) ])
     return X
@@ -126,7 +192,7 @@ def main():
     N = 1000
     K = 3
     X = init_board_gauss(N, K)
-
+    """
     k_means = KMeans(K=K, X=X)
     k_means.find_centroids()
     k_means.visualize("K-means, Sample size: %d, cluters: %d" % (N, K))
@@ -136,6 +202,7 @@ def main():
     k_pp.find_centroids()
     k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, K))
     plot.show()
-
+    """
+    visualize_k(X)
 if __name__ == "__main__":
     main()
