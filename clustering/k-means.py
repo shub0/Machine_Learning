@@ -20,6 +20,7 @@ import random
 import collections
 import matplotlib.pyplot as plot
 import operator
+from data_generator import *
 
 # Lloyd's algorithm (standard K-means)
 class KMeans():
@@ -227,25 +228,6 @@ class OptimalK(KPlusPlus):
         ax3.xaxis.set_ticks(range(1,len(ks)+1))
         plot.savefig('optimalK.png', bbox_inches='tight', dpi=100)
 
-# utils
-def init_board(N):
-    X = np.array([ (random.uniform(-1, 1), random.uniform(-1,1)) for i in range(N) ])
-    return X
-
-def init_board_gauss(N, K):
-    n = float(N) / K
-    X = list()
-    for index in range(K):
-        mu    = (random.uniform(-1, 1), random.uniform(-1, 1))
-        sigma = random.uniform(0.05, 0.5)
-        x = list()
-        while len(x) < n:
-            a, b = np.array([ np.random.normal(mu[0], sigma), np.random.normal(mu[1], sigma) ])
-            if abs(a) < 1 and abs(b) < 1:
-                x.append([a, b])
-        X.extend(x)
-    X = np.array(X)[:N]
-    return X
 
 def main():
     N = 4000
