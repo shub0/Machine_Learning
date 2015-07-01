@@ -22,12 +22,12 @@ def init_board_gauss(N, K):
     X = np.array(X)[:N]
     return X
 
-def init_board_half_moon(N):
+def init_board_half_moon(N, radius = 6, offset = 1):
     n_samples_out = N // 2
-    n_samples_in = N - n_samples_out
-    outer_circ_x = np.cos(np.linspace(0, np.pi, n_samples_out)) + np.random.normal(0, 0.1, n_samples_out)
-    outer_circ_y = np.sin(np.linspace(0, np.pi, n_samples_out)) + np.random.normal(0, 0.1, n_samples_out)
-    inner_circ_x = 1 - np.cos(np.linspace(0, np.pi, n_samples_in))  + np.random.normal(0, 0.1, n_samples_out)
-    inner_circ_y = 1 - np.sin(np.linspace(0, np.pi, n_samples_in)) - .5  + np.random.normal(0, 0.1, n_samples_out)
+    n_samples_in  = N - n_samples_out
+    outer_circ_x  = np.cos(np.linspace(0, np.pi, n_samples_out)) + np.random.normal(0, 0.1, n_samples_out)
+    outer_circ_y  = np.sin(np.linspace(0, np.pi, n_samples_out)) + np.random.normal(0, 0.1, n_samples_out)
+    inner_circ_x  = 1 - np.cos(np.linspace(0, np.pi, n_samples_in))  + np.random.normal(0, 0.1, n_samples_out)
+    inner_circ_y  = offset / 2 - np.sin(np.linspace(0, np.pi, n_samples_in)) + np.random.normal(0, 0.1, n_samples_out)
 
-    return np.array( zip(outer_circ_x, outer_circ_y) + zip(inner_circ_x, inner_circ_y) )
+    return np.array( zip(radius * outer_circ_x, radius * outer_circ_y) + zip(radius * inner_circ_x, radius * inner_circ_y) )

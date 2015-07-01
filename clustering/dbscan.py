@@ -8,9 +8,10 @@ import matplotlib.pyplot as plot
 import operator
 import collections
 from data_generator import *
+from sklearn.cluster import DBSCAN
 
 UNCLASSIFIED = False
-NOISE = None
+NOISE = -1
 
 # A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise
 # Martin Ester, Hans-Peter Kriegel, Jörg Sander, Xiaowei Xu
@@ -86,8 +87,6 @@ def dbscan(data, eps, min_points):
 
     clusters = collections.defaultdict(list)
     for index in range(n_points):
-        if classifications[index] == UNCLASSIFIED or classifications[index] == NOISE:
-            classifications[index] = cluster_id + 1
         clusters[classifications[index]].append(data[index])
     return clusters
 
@@ -96,13 +95,26 @@ def visualize(data):
     for cluster_id in data.keys():
         x = [ point[0] for point in data[cluster_id] ]
         y = [ point[1] for point in data[cluster_id] ]
-        plot.scatter(x, y, c=colors[cluster_id], label="Cluster %d" % (cluster_id))
+        if cluster_id == NOISE:
+            plot.scatter(x, y, c='black', label="Noise")
+        else:
+            plot.scatter(x, y, c=colors[cluster_id], label="Cluster %d" % (cluster_id))
     plot.legend()
     plot.show()
 
+def sklearn_demo(data, eps, min_points):
+    N = len(data)
+    db = DBSCAN(eps = eps, min_samples = min_points).fit(data)
+    clusters = collections.defaultdict(list)
+    for index in range(N):
+        clusters[db.labels_[index]].append(data[index])
+    return clusters
+
+
 if __name__ == "__main__":
-    N = 100
-    data = init_board_half_moon(N)
-    visualize({0: data})
-    clusters = dbscan(data, 0.5, N/5)
-    visualize(clusters)
+    N = 1000
+    data = init_board_half_moon(N=N, offset = 0.5)
+    eps = 0.5
+    min_points = N / 5
+    visualize(dbscan(data, eps, min_points))
+    visualize(sklearn_demo(data, eps, min_points))
