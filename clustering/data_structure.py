@@ -10,10 +10,10 @@ class Point:
 
         self.x = x
         self.y = y
-        self.cd = None              # core distance
-        self.rd = None              # reachability distance
-        self.processed = False      # has this point been processed?
-        self.clustered = False      # has this point been clustered?
+        self.core_distance = None                    # core distance
+        self.reachability_distance = None            # reachability distance
+        self.processed = False                       # has this point been processed?
+        self.clustered = False                       # has this point been clustered?
 
     # --------------------------------------------------------------------------
     # calculate the distance between any two points on earth
