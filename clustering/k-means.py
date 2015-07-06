@@ -20,11 +20,11 @@ import random
 import collections
 import matplotlib.pyplot as plot
 import operator
-from data_structure import *
 from data_utils import *
+from data_structure import *
 
 # Lloyd's algorithm (standard K-means)
-class KMeans():
+class KMeans(ClusteringAlgorithm):
     def __init__(self, X=None, N=0):
         if X == None:
             if N == 0:
@@ -67,7 +67,7 @@ class KMeans():
         ymin, ymax = min(X, key=lambda a: a[1])[1], max(X, key=lambda a: a[1])[1]
         return (xmin, xmax), (ymin, ymax)
 
-    def cluster(self, K):
+    def run(self, K):
         # Initialize to K random centers
         X = self.X
         self.old_centroid = random.sample(X, K)
@@ -122,11 +122,12 @@ class OptimalK(KPlusPlus):
     # Alternative approach
     def fk(self, this_k, skm1=0):
         X = self.X
+        kpp = KPlusPlus(X)
         dimension = len(X[0])
         a = lambda k, dimension: 1 - 3/(4*dimension) if k== 2 \
             else a(k-1, dimension) + (1-a(k-1, dimension)) / 6
-        self.cluster(this_k)
-        centroid, clusters = self.centroid, self.clusters
+        kpp.run(this_k)
+        centroid, clusters = kpp.centroid, kpp.clusters
         sk = sum([ np.linalg.norm(centroid[i] - point) ** 2 \
                   for i in range(this_k) for point in clusters[i] ])
         if this_k == 1 or skm1 ==0:
@@ -138,9 +139,10 @@ class OptimalK(KPlusPlus):
     # Gap statistics method
     def gap(self, this_k):
         X = self.X
+        kpp = KPlusPlus(X)
         (xmin,xmax), (ymin,ymax) = self._bounding_box()
-        self.cluster(K = this_k)
-        centroid, clusters = self.centroid, self.clusters
+        kpp.run(this_k)
+        centroid, clusters = kpp.centroid, kpp.clusters
         Wk = np.log(sum([np.linalg.norm(centroid[cluster_id]-c)**2/(2*len(c))  for cluster_id in range(this_k) for c in clusters[cluster_id]]))
         # Create B reference datasets
         B = 10
@@ -150,9 +152,9 @@ class OptimalK(KPlusPlus):
             for n in range(len(X)):
                 Xb.append([random.uniform(xmin,xmax), random.uniform(ymin,ymax)])
             Xb = np.array(Xb)
-            kb = OptimalK(X=Xb)
-            kb.cluster(K = this_k)
-            ms, cs = kb.centroid, kb.clusters
+            kppb = KPlusPlus(X=Xb)
+            kppb.run(K = this_k)
+            ms, cs = kppb.centroid, kppb.clusters
             BWkbs[i] = np.log(sum([np.linalg.norm(ms[j]-c)**2/(2*len(c)) for j in range(this_k) for c in cs[j]]))
 
         Wkb = sum(BWkbs)/B
@@ -164,7 +166,7 @@ class OptimalK(KPlusPlus):
         fs = [0] * len(ks)
         Wks, Wkbs, sks = [0] * (len(ks)+1), [0] * (len(ks)+1), [0] * (len(ks)+1)
         # Special case K=1
-        self._init_centroid(K=1)
+        #self._init_centroid(K=1)
         if algorithm == 'f':
             fs[0], Sk = self.fK(K=1)
         elif algorithm == 'gap':
@@ -174,7 +176,7 @@ class OptimalK(KPlusPlus):
             Wks[0], Wkbs[0], sks[0] = self.gap(1)
         # Rest of Ks
         for k in ks[1:]:
-            self._init_centroid(K=k)
+            #self._init_centroid(K=k)
             if algorithm == 'f':
                 fs[k-1], Sk = self.fk(K=k, skm1=Sk)
             elif algorithm == 'gap':
@@ -231,7 +233,7 @@ class OptimalK(KPlusPlus):
 
 
 def main():
-    N = 100
+    N = 4000
     K = 3
     X = init_board_gauss(N, K)
     """
@@ -243,10 +245,11 @@ def main():
     """
     optimal_k = OptimalK(X = X)
     optimal_k.run(max_k = 2 * K)
-
-    k_pp = KPlusPlus(X=X)
-    k_pp.cluster(K=optimal_k.gap_optimal)
-    k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, optimal_k.gap_optimal))
+    optimal_k.visualize()
+    plot.show()
+    kpp = KPlusPlus(X=X)
+    kpp.run(K=optimal_k.gap_optimal)
+    kpp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, optimal_k.gap_optimal))
     plot.show()
 
 if __name__ == "__main__":
