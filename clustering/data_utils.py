@@ -2,10 +2,9 @@
 import numpy as np
 import random
 
-def init_board(N):
-    X = np.array([ (random.uniform(-1, 1), random.uniform(-1,1)) for i in range(N) ])
-    return X
-
+import math
+from data_structure import *
+import matplotlib.pyplot as plot
 
 def init_board_gauss(N, K):
     n = float(N) / K
@@ -31,3 +30,14 @@ def init_board_half_moon(N, radius = 6, offset = 1):
     inner_circ_y  = offset / 2 - np.sin(np.linspace(0, np.pi, n_samples_in)) + np.random.normal(0, 0.1, n_samples_out)
 
     return np.array( zip(radius * outer_circ_x, radius * outer_circ_y) + zip(radius * inner_circ_x, radius * inner_circ_y) )
+
+def visualize(clusters, msg = None):
+    colors = ["red", "green", "blue", "yellow", "cyan", "magenta"]
+    for cluster_id, cluster in enumerate(clusters):
+        x = [ point.x for point in cluster.points ]
+        y = [ point.y for point in cluster.points ]
+        plot.scatter(x, y, c=colors[cluster_id], label="Cluster %d" % (cluster_id))
+    if msg:
+        plot.title(msg)
+    plot.legend()
+    plot.show()

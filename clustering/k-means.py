@@ -20,7 +20,8 @@ import random
 import collections
 import matplotlib.pyplot as plot
 import operator
-from data_generator import *
+from data_structure import *
+from data_utils import *
 
 # Lloyd's algorithm (standard K-means)
 class KMeans():
@@ -66,7 +67,7 @@ class KMeans():
         ymin, ymax = min(X, key=lambda a: a[1])[1], max(X, key=lambda a: a[1])[1]
         return (xmin, xmax), (ymin, ymax)
 
-    def find_centroids(self, K):
+    def cluster(self, K):
         # Initialize to K random centers
         X = self.X
         self.old_centroid = random.sample(X, K)
@@ -124,7 +125,7 @@ class OptimalK(KPlusPlus):
         dimension = len(X[0])
         a = lambda k, dimension: 1 - 3/(4*dimension) if k== 2 \
             else a(k-1, dimension) + (1-a(k-1, dimension)) / 6
-        self.find_centroids(this_k)
+        self.cluster(this_k)
         centroid, clusters = self.centroid, self.clusters
         sk = sum([ np.linalg.norm(centroid[i] - point) ** 2 \
                   for i in range(this_k) for point in clusters[i] ])
@@ -138,7 +139,7 @@ class OptimalK(KPlusPlus):
     def gap(self, this_k):
         X = self.X
         (xmin,xmax), (ymin,ymax) = self._bounding_box()
-        self.find_centroids(K = this_k)
+        self.cluster(K = this_k)
         centroid, clusters = self.centroid, self.clusters
         Wk = np.log(sum([np.linalg.norm(centroid[cluster_id]-c)**2/(2*len(c))  for cluster_id in range(this_k) for c in clusters[cluster_id]]))
         # Create B reference datasets
@@ -150,7 +151,7 @@ class OptimalK(KPlusPlus):
                 Xb.append([random.uniform(xmin,xmax), random.uniform(ymin,ymax)])
             Xb = np.array(Xb)
             kb = OptimalK(X=Xb)
-            kb.find_centroids(K = this_k)
+            kb.cluster(K = this_k)
             ms, cs = kb.centroid, kb.clusters
             BWkbs[i] = np.log(sum([np.linalg.norm(ms[j]-c)**2/(2*len(c)) for j in range(this_k) for c in cs[j]]))
 
@@ -235,7 +236,7 @@ def main():
     X = init_board_gauss(N, K)
     """
     k_means = KMeans(X=X)
-    k_means.find_centroids(K)
+    k_means.cluster(K)
     k_means.visualize("K-means, Sample size: %d, cluters: %d" % (N, K))
     plot.show()
 
@@ -244,7 +245,7 @@ def main():
     optimal_k.run(max_k = 2 * K)
 
     k_pp = KPlusPlus(X=X)
-    k_pp.find_centroids(K=optimal_k.gap_optimal)
+    k_pp.cluster(K=optimal_k.gap_optimal)
     k_pp.visualize("K-means ++, Sample size: %d, cluters: %d" % (N, optimal_k.gap_optimal))
     plot.show()
 
