@@ -231,7 +231,7 @@ class OptimalK(KPlusPlus):
 
 
 def main():
-    N = 4000
+    N = 100
     K = 3
     X = init_board_gauss(N, K)
     """

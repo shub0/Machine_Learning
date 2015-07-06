@@ -73,5 +73,5 @@ class Cluster:
 # Interface for all clustering algorithm
 ################################################################################
 class ClusteringAlgorithm:
-    def cluster(self, K):
+    def run(self, K):
         raise NotImplementedError()

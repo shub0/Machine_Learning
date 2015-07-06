@@ -45,7 +45,7 @@ class Dbscan(ClusteringAlgorithm):
 
     # Clustering points
     # DBSCAN algorithm does not require a give K
-    def cluster(self, K = None):
+    def run(self, K = None):
         cluster = Cluster()
         for point in self.points:
             if point.processed:
@@ -69,5 +69,5 @@ if __name__ == "__main__":
     eps = 5
     min_points = N / 5
     db = Dbscan(points, min_points, eps)
-    db.cluster()
+    db.run()
     visualize(db.clusters, "DBSCAN Alg")
