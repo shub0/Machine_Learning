@@ -2,15 +2,9 @@
 Description     : Simple Python implementation of the Apriori Algorithm
 
 Usage:
-<<<<<<< HEAD
-    $python apriori.py -f DATASET.csv -s min_support  -c min_confidence
-
-    $python apriori.py -f DATASET.csv -s 0.15 -c 0.6
-=======
     $python apriori.py -f DATAFILE -s min_support  -c min_confidence
 
     $python apriori.py -f DATAFILE -s 0.15 -c 0.6
->>>>>>> Apriori patch 2
 """
 
 import sys
