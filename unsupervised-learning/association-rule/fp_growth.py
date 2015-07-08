@@ -5,6 +5,7 @@ from itertools import imap
 from fp_tree_struct import FPTree, FPNode
 import logging
 import os
+import sys
 import time
 from itertools import chain, combinations
 
@@ -14,141 +15,125 @@ def subsets(arr):
     """
     return chain(*[combinations(arr, i + 1) for i, a in enumerate(arr)])
 
-def conditional_tree_from_paths(paths, minimum_support):
-    """
-    Builds a conditional FP-tree from the given prefix paths.
-    """
-    tree = FPTree()
-    condition_item = None
-    items = set()
+class FPGrowth:
+    def __init__(self, sample, min_support):
+        self.minimum_support = min_support
+        logging.info("Building FP tree started ...")
+        raw_data_size = sys.getsizeof(sample)
+        start_time = time.time()
+        self._build_frequent_tree(sample)
+        tree_size = sys.getsizeof(self.fp_tree)
+        time_elapsed = 1000.0*(time.time() - start_time)
+        logging.info('Building FP tree completed. Processed %d samples in %.1f ms (%.2f ms/sample), compressed ratio: %.4f%%',
+                     len(sample), time_elapsed, time_elapsed / len(sample), 100.0 * tree_size / raw_data_size)
 
-    # Import the nodes in the paths into the new tree. Only the counts of the
-    # leaf notes matter; the remaining counts will be reconstructed from the
-    # leaf counts.
-    for path in paths:
-        if condition_item is None:
-            condition_item = path[-1].item
+    def _build_frequent_tree(self, sample):
+        support = defaultdict(lambda: 0) # mapping from items to their supports
+        processed_transactions = list()
+        # Load the passed-in transactions and count the support that individual item have.
+        for transaction in sample:
+            processed = list()
+            for item in transaction.strip(',').split(','):
+                support[item] += 1
+                processed.append(item)
+            processed_transactions.append(processed)
+        self.minimum_support *= len(sample)
 
-        point = tree.root
-        for node in path:
-            next_point = point.search(node.item)
-            if not next_point:
-                # Add a new node to the tree.
-                items.add(node.item)
-                count = node.count if node.item == condition_item else 0
-                next_point = FPNode(tree, node.item, count)
-                point.add(next_point)
-                tree.update_route(next_point)
-            point = next_point
+        # Remove infrequent items from the item support dictionary.
+        self.freq_items = dict((item, support) for item, support in support.iteritems() if support > self.minimum_support)
+        # Build our FP-tree. Before any transactions can be added to the tree, they
+        # must be stripped of infrequent items and their surviving items must be
+        # sorted in decreasing order of frequency.
+        def clean_transaction(transaction):
+            transaction = filter(lambda x: x in self.freq_items, transaction)
+            transaction.sort(key=lambda x: self.freq_items[x], reverse=True)
+            return transaction
 
-    assert condition_item is not None
+        self.fp_tree = FPTree()
+        for transaction in imap(clean_transaction, processed_transactions):
+            self.fp_tree.add(transaction)
 
-    # Calculate the counts of the non-leaf nodes.
-    for path in tree.prefix_paths(condition_item):
-        count = path[-1].count
-        for node in reversed(path[:-1]):
-            node._count += count
+    def _conditional_tree_from_paths(self, paths):
+        """
+        Builds a conditional FP-tree from the given prefix paths.
+        """
+        tree = FPTree()
+        condition_item = None
+        items = set()
 
-    # Eliminate the nodes for any items that are no longer frequent.
-    for item in items:
-        support = sum(n.count for n in tree.nodes(item))
-        if support < minimum_support:
-            # Doesn't make the cut anymore
-            for node in tree.nodes(item):
-                if node.parent is not None:
-                    node.parent.remove(node)
+        # Import the nodes in the paths into the new tree. Only the counts of the
+        # leaf notes matter; the remaining counts will be reconstructed from the
+        # leaf counts.
+        for path in paths:
+            if condition_item is None:
+                condition_item = path[-1].item
 
-    # Finally, remove the nodes corresponding to the item for which this
-    # conditional tree was generated.
-    for node in tree.nodes(condition_item):
-        if node.parent is not None: # the node might already be an orphan
-            node.parent.remove(node)
+            point = tree.root
+            for node in path:
+                next_point = point.search(node.item)
+                if not next_point:
+                    # Add a new node to the tree.
+                    items.add(node.item)
+                    count = node.count if node.item == condition_item else 0
+                    next_point = FPNode(tree, node.item, count)
+                    point.add(next_point)
+                    tree.update_route(next_point)
+                point = next_point
 
-    return tree
+        assert condition_item is not None
 
-def build_frequent_tree(sample, minimum_support):
-    logging.info("Building FP tree started ...")
-    items = defaultdict(lambda: 0) # mapping from items to their supports
-    processed_transactions = list()
-    start_time = time.time()
-    # Load the passed-in transactions and count the support that individual
-    # items have.
-    for transaction in sample:
-        processed = list()
-        for item in transaction.strip(',').split(','):
-            items[item] += 1
-            processed.append(item)
-        processed_transactions.append(processed)
+        # Calculate the counts of the non-leaf nodes.
+        for path in tree.prefix_paths(condition_item):
+            count = path[-1].count
+            for node in reversed(path[:-1]):
+                node._count += count
 
-    # Remove infrequent items from the item support dictionary.
-    freq_items = dict((item, support) for item, support in items.iteritems() if support >= minimum_support)
+        # Eliminate the nodes for any items that are no longer frequent.
+        for item in items:
+            support = sum(n.count for n in tree.nodes(item))
+            if support < self.minimum_support:
+                # Doesn't make the cut anymore
+                for node in tree.nodes(item):
+                    if node.parent is not None:
+                        node.parent.remove(node)
 
-    # Build our FP-tree. Before any transactions can be added to the tree, they
-    # must be stripped of infrequent items and their surviving items must be
-    # sorted in decreasing order of frequency.
-    def clean_transaction(transaction):
-        transaction = filter(lambda x: x in freq_items, transaction)
-        transaction.sort(key=lambda x: freq_items[x], reverse=True)
-        return transaction
+        # Finally, remove the nodes corresponding to the item for which this
+        # conditional tree was generated.
+        for node in tree.nodes(condition_item):
+            if node.parent is not None: # the node might already be an orphan
+                node.parent.remove(node)
 
-    fp_tree = FPTree()
-    for transaction in imap(clean_transaction, processed_transactions):
-        fp_tree.add(transaction)
-    time_elapsed = 1000.0*(time.time() - start_time)
-    logging.info('Building FP tree completed. Processed %d samples in %.1f ms (%.2f ms/sample)', len(sample), time_elapsed, time_elapsed / len(sample))
-    return fp_tree, len(sample)
+        return tree
 
-def find_with_suffix(tree, suffix, minimum_support, include_support=False):
-    """
-    Find frequent itemsets in the given transactions using FP-growth. This
-    function returns a generator instead of an eagerly-populated list of items.
-    The `transactions` parameter can be any iterable of iterables of items.
-    `minimum_support` should be an integer specifying the minimum number of
-    occurrences of an itemset for it to be accepted.
-    Each item must be hashable (i.e., it must be valid as a member of a
-    dictionary or a set).
-    If `include_support` is true, yield (itemset, support) pairs instead of
-    just the itemsets.
-    """
-    for item, nodes in tree.items():
-        support = sum(n.count for n in nodes)
-        if support >= minimum_support and item not in suffix:
-            # New winner!
-            found_set = [item] + suffix
-            yield (found_set, support) if include_support else found_set
+    def find_with_suffix(self, tree, suffix):
+        """
+        Find frequent itemsets in the given transactions using FP-growth. This
+        function returns a generator instead of an eagerly-populated list of items.
+        The `transactions` parameter can be any iterable of iterables of items.
+        `minimum_support` should be an integer specifying the minimum number of
+        occurrences of an itemset for it to be accepted.
+        Each item must be hashable (i.e., it must be valid as a member of a
+        dictionary or a set).
+        If `include_support` is true, yield (itemset, support) pairs instead of
+        just the itemsets.
+        """
+        for item, nodes in tree.items():
+            support = sum(n.count for n in nodes)
+            if support > self.minimum_support and item not in suffix:
+                # New winner!
+                found_set = [item] + suffix
+                yield (tuple(found_set), support)
 
-            # Build a conditional tree and recursively search for frequent
-            # itemsets within it.
-            cond_tree = conditional_tree_from_paths(tree.prefix_paths(item), minimum_support)
-            for s in find_with_suffix(cond_tree, found_set, minimum_support, include_support):
-                yield s # pass along the good news to our caller
+                # Build a conditional tree and recursively search for frequent
+                # itemsets within it.
+                cond_tree = self._conditional_tree_from_paths(tree.prefix_paths(item))
+                for s in self.find_with_suffix(cond_tree, found_set):
+                    yield s # pass along the good news to our caller
 
-
-def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
-    # Search for frequent itemsets, and yield the results we find.
-    for itemset in find_with_suffix(master_tree, [], minimum_support, include_support):
-        yield itemset
-
-def generate_rule(tree, minimum_support, minimum_confidence):
-    rules = list()
-    items = dict()
-    for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
-        items[tuple(itemset)] = support
-    for freq_item in items:
-        _subsets = map(frozenset, [x for x in subsets(freq_item)])
-        for antecedent in _subsets:
-            consequent = freq_item.difference(antecedent)
-            if len(consequent) > 0:
-                confidence = items[tuple(freq_item)] / items[tuple(antecedent)]
-                lift = confidence / items[tuple(consequent)]
-                if confidence > minimum_confidence:
-                    rules.append(((tuple(antecedent), tuple(consequent)), confidence, lift))
-    return rules
-
-def output(rules):
-    for rule, confidence, lift in sorted(self.rules, key=lambda (rule, confidence, lift): confidence):
-        pre, post = rule
-        print "Rule: %s ==> %s , %.3f, %.3f" % (str(pre), str(post), confidence, lift)
+    def run(self):
+        # Search for frequent itemsets, and yield the results we find.
+        for itemset in self.find_with_suffix(self.fp_tree, []):
+            yield itemset
 
 def main():
     from optparse import OptionParser
@@ -173,16 +158,14 @@ def main():
     try:
         start_time = time.time()
         transactions = f.read().splitlines()
-        data_size = len(transactions)
-        minimum_confidence = options.minconf
-        minimum_support = options.minsup * data_size
-        tree, size = build_frequent_tree(transactions, minimum_support)
-        logging.info("Frequent Pattern started")
-        items = dict()
-        for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
-            items[tuple(itemset)] = support
+        fp_growth = FPGrowth(transactions, options.minsup)
+        logging.info("Mining frequent Pattern started")
+        freq_pattern = dict()
+        for item, support in fp_growth.run():
+            freq_pattern[item] = support
+            print "(%s : %d)" % (item, support)
         end_time = time.time()
-        logging.info("Found %d frequent pattern with minimum support %f, time elapsed %.1f ms", len(items), options.minsup, 1000.0 * (end_time - start_time))
+        logging.info("Found %d frequent pattern with minimum support %f, time elapsed %.1f ms", len(freq_pattern), options.minsup, 1000.0 * (end_time - start_time))
     finally:
         f.close()
 

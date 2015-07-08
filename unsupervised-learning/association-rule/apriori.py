@@ -8,7 +8,6 @@ Usage:
 """
 
 import sys
-
 from itertools import chain, combinations
 from collections import defaultdict
 from optparse import OptionParser
@@ -93,9 +92,9 @@ class Apriori:
             # Filter sets with min_support
             current_set_size_k = self._filter_item_sets(current_set_size_k)
 
-        self.items = list()
+        self.freq_pattern = list()
         for key, value in self.large_set.items():
-            self.items.extend([(tuple(item), self._get_support(item)) for item in value])
+            self.freq_pattern.extend([(tuple(item), self._get_support(item)) for item in value])
 
     def generate_rules(self):
         self.rules = list()
@@ -115,7 +114,7 @@ class Apriori:
         """
         prints the generated itemsets sorted by support and the confidence rules sorted by confidence
         """
-        for item, support in sorted(self.items, key=lambda (item, support): support):
+        for item, support in sorted(self.freq_pattern, key=lambda (item, support): support):
             print "item: %s , %.3f" % (str(item), support)
         print "\n------------------------ RULES:"
         for rule, confidence, lift in sorted(self.rules, key=lambda (rule, confidence, lift): confidence):
