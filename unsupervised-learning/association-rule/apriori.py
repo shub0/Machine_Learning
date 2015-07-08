@@ -12,6 +12,8 @@ import sys
 from itertools import chain, combinations
 from collections import defaultdict
 from optparse import OptionParser
+import logging
+import time
 
 class Apriori:
     def __init__(self, data_iterator, min_support, min_confidence):
@@ -77,13 +79,13 @@ class Apriori:
         """
 
         # Global dictionary which stores (key=size of item_sets, value=n-item_sets) which satisfy min_support
-        large_set = dict()
+        self.large_set = dict()
 
         # 1-item sets
         current_set_size_k = self._filter_item_sets(self.item_set)
         k = 1
         while(current_set_size_k != set([])):
-            large_set[k] = current_set_size_k
+            self.large_set[k] = current_set_size_k
             # Continue searching sets with larger size
             k = k + 1
             # Generate new sets with size = K from set with size = k-1
@@ -92,12 +94,13 @@ class Apriori:
             current_set_size_k = self._filter_item_sets(current_set_size_k)
 
         self.items = list()
-        for key, value in large_set.items():
+        for key, value in self.large_set.items():
             self.items.extend([(tuple(item), self._get_support(item)) for item in value])
 
+    def generate_rules(self):
         self.rules = list()
         # ignore 0-item_sets
-        for key, value in large_set.items()[1:]:
+        for key, value in self.large_set.items()[1:]:
             for item in value:
                 _subsets = map(frozenset, [x for x in Apriori.subsets(item)])
                 for antecedent in _subsets:
@@ -109,7 +112,9 @@ class Apriori:
                             self.rules.append(((tuple(antecedent), tuple(consequent)), confidence, lift))
 
     def output(self):
-        """prints the generated itemsets sorted by support and the confidence rules sorted by confidence"""
+        """
+        prints the generated itemsets sorted by support and the confidence rules sorted by confidence
+        """
         for item, support in sorted(self.items, key=lambda (item, support): support):
             print "item: %s , %.3f" % (str(item), support)
         print "\n------------------------ RULES:"
@@ -118,7 +123,9 @@ class Apriori:
             print "Rule: %s ==> %s , %.3f, %.3f" % (str(pre), str(post), confidence, lift)
 
 def load_data(fname):
-    """Function which reads from the file and yields a generator"""
+    """
+    Function which reads from the file and yields a generator
+    """
     file_iter = open(fname, 'rU')
     for line in file_iter:
         line = line.strip().strip(',')                        # Remove trailing/leading comma
@@ -128,7 +135,7 @@ def load_data(fname):
 def main():
 
     optparser = OptionParser()
-    optparser.add_option('-f', '--inputFile',
+    optparser.add_option('-f', '--file',
                          dest='input',
                          help='filename containing csv',
                          default=None)
@@ -144,7 +151,12 @@ def main():
                          type='float')
 
     (options, args) = optparser.parse_args()
+    logging.basicConfig(filename='apriori.log',
+                    format='%(levelname)s: %(asctime)s %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.DEBUG)
 
+    start_time = time.time()
     input_file = None
     if options.input is None:
             input_file = sys.stdin
@@ -153,11 +165,14 @@ def main():
     else:
             print 'No dataset filename specified, system with exit\n'
             sys.exit('System will exit')
-
+    logging.info("Apriori Started ....")
     min_support = options.minS
     min_confidence = options.minC
     apriori = Apriori(input_file, min_support, min_confidence)
     apriori.run()
+    end_time = time.time()
+    apriori.generate_rules()
+    logging.info("Apriori completed, found %d rules with minimum support %f, time elapased %.1f ms." % (len(apriori.rules), min_support, 1000.0 * (end_time - start_time)))
     apriori.output()
 
 if __name__ == "__main__":

@@ -6,9 +6,18 @@ from fp_tree_struct import FPTree, FPNode
 import logging
 import os
 import time
+from itertools import chain, combinations
+
+def subsets(arr):
+    """
+    Returns non empty subsets of arr
+    """
+    return chain(*[combinations(arr, i + 1) for i, a in enumerate(arr)])
 
 def conditional_tree_from_paths(paths, minimum_support):
-    """Builds a conditional FP-tree from the given prefix paths."""
+    """
+    Builds a conditional FP-tree from the given prefix paths.
+    """
     tree = FPTree()
     condition_item = None
     items = set()
@@ -29,7 +38,7 @@ def conditional_tree_from_paths(paths, minimum_support):
                 count = node.count if node.item == condition_item else 0
                 next_point = FPNode(tree, node.item, count)
                 point.add(next_point)
-                tree._update_route(next_point)
+                tree.update_route(next_point)
             point = next_point
 
     assert condition_item is not None
@@ -57,31 +66,29 @@ def conditional_tree_from_paths(paths, minimum_support):
 
     return tree
 
-
-def build_frequent_tree(transactions, minimum_support):
+def build_frequent_tree(sample, minimum_support):
     logging.info("Building FP tree started ...")
     items = defaultdict(lambda: 0) # mapping from items to their supports
-    processed_transactions = []
+    processed_transactions = list()
     start_time = time.time()
     # Load the passed-in transactions and count the support that individual
     # items have.
-    sample = transactions.splitlines()
     for transaction in sample:
-        processed = []
+        processed = list()
         for item in transaction.strip(',').split(','):
             items[item] += 1
             processed.append(item)
         processed_transactions.append(processed)
 
     # Remove infrequent items from the item support dictionary.
-    items = dict((item, support) for item, support in items.iteritems() if support >= minimum_support)
+    freq_items = dict((item, support) for item, support in items.iteritems() if support >= minimum_support)
 
     # Build our FP-tree. Before any transactions can be added to the tree, they
     # must be stripped of infrequent items and their surviving items must be
     # sorted in decreasing order of frequency.
     def clean_transaction(transaction):
-        transaction = filter(lambda x: x in items, transaction)
-        transaction.sort(key=lambda x: items[x], reverse=True)
+        transaction = filter(lambda x: x in freq_items, transaction)
+        transaction.sort(key=lambda x: freq_items[x], reverse=True)
         return transaction
 
     fp_tree = FPTree()
@@ -89,7 +96,7 @@ def build_frequent_tree(transactions, minimum_support):
         fp_tree.add(transaction)
     time_elapsed = 1000.0*(time.time() - start_time)
     logging.info('Building FP tree completed. Processed %d samples in %.1f ms (%.2f ms/sample)', len(sample), time_elapsed, time_elapsed / len(sample))
-    return fp_tree
+    return fp_tree, len(sample)
 
 def find_with_suffix(tree, suffix, minimum_support, include_support=False):
     """
@@ -122,11 +129,34 @@ def find_frequent_itemsets(master_tree, minimum_support, include_support=False):
     for itemset in find_with_suffix(master_tree, [], minimum_support, include_support):
         yield itemset
 
+def generate_rule(tree, minimum_support, minimum_confidence):
+    rules = list()
+    items = dict()
+    for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
+        items[tuple(itemset)] = support
+    for freq_item in items:
+        _subsets = map(frozenset, [x for x in subsets(freq_item)])
+        for antecedent in _subsets:
+            consequent = freq_item.difference(antecedent)
+            if len(consequent) > 0:
+                confidence = items[tuple(freq_item)] / items[tuple(antecedent)]
+                lift = confidence / items[tuple(consequent)]
+                if confidence > minimum_confidence:
+                    rules.append(((tuple(antecedent), tuple(consequent)), confidence, lift))
+    return rules
+
+def output(rules):
+    for rule, confidence, lift in sorted(self.rules, key=lambda (rule, confidence, lift): confidence):
+        pre, post = rule
+        print "Rule: %s ==> %s , %.3f, %.3f" % (str(pre), str(post), confidence, lift)
+
 def main():
     from optparse import OptionParser
     p = OptionParser(usage='%prog --help')
-    p.add_option('-s', '--minimum-support', dest='minsup', type='int',
-        help='Minimum itemset support (default: 2)')
+    p.add_option('-c', '--minimum-confidence', dest='minconf', type='float',
+                 help='Minimum rule confidence (default: 0.85)')
+    p.add_option('-s', '--minimum-support', dest='minsup', type='float',
+                 help='Minimum itemset support (default: 0.15)')
     p.set_defaults(minsup=2)
     p.add_option('-f', '--file', dest='filename', type='string',
         help='Data filename')
@@ -141,20 +171,18 @@ def main():
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.DEBUG)
     try:
-        minimum_support = options.minsup
-        tree = build_frequent_tree(f.read(), minimum_support)
-        """
+        start_time = time.time()
+        transactions = f.read().splitlines()
+        data_size = len(transactions)
+        minimum_confidence = options.minconf
+        minimum_support = options.minsup * data_size
+        tree, size = build_frequent_tree(transactions, minimum_support)
+        logging.info("Frequent Pattern started")
+        items = dict()
         for itemset, support in find_frequent_itemsets(tree, minimum_support, True):
-            print "{" + ", ".join(itemset) + "} " + str(support)
-        """
-        suffix = ["17108", "20203"]
-        logging.info("Frequent Pattern with Suffix: %s", suffix)
-        frequent_pattern = list()
-        for itemset, support in find_with_suffix(tree, suffix, minimum_support, True):
-            frequent_pattern.append((', '.join(itemset), support))
-        frequent_pattern.sort(key=lambda x: x[1], reverse=True)
-        logging.info("Found %d frequent pattern with minimum support %d", len(frequent_pattern), minimum_support)
-        print '\n'.join([ str(pattern) for pattern in frequent_pattern ])
+            items[tuple(itemset)] = support
+        end_time = time.time()
+        logging.info("Found %d frequent pattern with minimum support %f, time elapsed %.1f ms", len(items), options.minsup, 1000.0 * (end_time - start_time))
     finally:
         f.close()
 

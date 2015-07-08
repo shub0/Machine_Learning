@@ -17,9 +17,11 @@ class FPNode(object):
             self._children[child.item] = child
             child.parent = self
 
+    # search item in the chidren list
     def search(self, item):
         return self._children.get(item, None)
 
+    # remove child from children list but include all grandchildren in the list
     def remove(self, child):
         try:
             if self._children[child.item] is child:
@@ -36,7 +38,7 @@ class FPNode(object):
             else:
                 raise ValueError('Node is not a valid child')
         except KeyError:
-            raise ValueError('node is not a valid child')
+            raise ValueError('Node is not a valid child')
 
     def __contains__(self, item):
         return item in self._children
@@ -70,6 +72,7 @@ class FPNode(object):
         doc = "The node's parent"
         def fget(self):
             return self._parent
+        # set value as parent
         def fset(self, value):
             if value is not None and not isinstance(value, FPNode):
                 raise TypeError('A node must be an FPNode as a parent')
@@ -79,10 +82,12 @@ class FPNode(object):
         return locals()
     parent = property(**parent())
 
+
     def neighbor():
         doc = "The node's neighbour"
         def fget(self):
             return self._neighbor
+        # set value as neighbor
         def fset(self, value):
             if value is not None and not isinstance(value, FPNode):
                 raise TypeError('A node must be an FPNode as a neighbor')
@@ -96,6 +101,7 @@ class FPNode(object):
     def children(self):
         return tuple(self._children.itervalues())
 
+    # recursively search the tree with root = self
     def insepct(self, depth=0):
         print (' ' * depth) + repr(self)
         for child in self.children:
@@ -110,12 +116,14 @@ class FPTree(object):
     Route = namedtuple('Route', 'head tail')
     def __init__(self):
         self._root = FPNode(self, None, None)
+        # store all linked list
         self._routes = dict()
 
     @property
     def root(self):
         return self._root
 
+    # read a new transaction
     def add(self, transaction):
         point = self._root
         for item in transaction:
@@ -127,10 +135,10 @@ class FPTree(object):
                 next_point = FPNode(self, item)
                 point.add(next_point)
                 # update the route of nodes that contains this item to include the new node
-                self._update_route(next_point)
+                self.update_route(next_point)
             point = next_point
 
-    def _update_route(self, point):
+    def update_route(self, point):
         assert self is point.tree
         try:
             route = self._routes[point.item]
@@ -139,10 +147,12 @@ class FPTree(object):
         except KeyError:
             self._routes[point.item] = self.Route(point, point)
 
+
     def items(self):
         for item in self._routes.iterkeys():
             yield (item, self.nodes(item))
 
+    # Iterate all fp nodes with node.item = item
     def nodes(self, item):
         try:
             node = self._routes[item][0]
@@ -152,6 +162,7 @@ class FPTree(object):
             yield node
             node = node.neighbor
 
+    # retrun all path ended at item
     def prefix_paths(self, item):
         def collect_path(node):
             path = list()
