@@ -114,13 +114,14 @@ class Apriori:
         """
         prints the generated itemsets sorted by support and the confidence rules sorted by confidence
         """
-        for item, support in sorted(self.freq_pattern, key=lambda (item, support): support):
+        for item, support in sorted(self.freq_pattern, key=lambda (item, support): support, reverse=True):
             print "item: %s , %.3f" % (str(item), support)
         print "\n------------------------ RULES:"
+        """
         for rule, confidence, lift in sorted(self.rules, key=lambda (rule, confidence, lift): confidence):
             pre, post = rule
             print "Rule: %s ==> %s , %.3f, %.3f" % (str(pre), str(post), confidence, lift)
-
+        """
 def load_data(fname):
     """
     Function which reads from the file and yields a generator
@@ -171,7 +172,7 @@ def main():
     apriori.run()
     end_time = time.time()
     apriori.generate_rules()
-    logging.info("Apriori completed, found %d rules with minimum support %f, time elapased %.1f ms." % (len(apriori.rules), min_support, 1000.0 * (end_time - start_time)))
+    logging.info("Apriori completed, %d pattern with minimum support %f, %d rules with minimum confidecne %f, time elapased %.1f ms." % (len(apriori.freq_pattern), min_support, len(apriori.rules), min_confidence, 1000.0 * (end_time - start_time)))
     apriori.output()
 
 if __name__ == "__main__":

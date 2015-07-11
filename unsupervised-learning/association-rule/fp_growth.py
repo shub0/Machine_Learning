@@ -1,23 +1,237 @@
 #! /usr/bin/python
 
-from collections import defaultdict
-from itertools import imap
-from fp_tree_struct import FPTree, FPNode
-import logging
-import os
-import sys
-import time
-from itertools import chain, combinations
+class FPNode:
+    def __init__(self, item, count = 1):
+        self._item = item
+        self._count = count
+        self._parent = None
+        self._children = {}
+        self._neighbor = None
 
-def subsets(arr):
+    def add_child(self, child):
+        """Add new child to node"""
+        if not isinstance(child, FPNode):
+            raise TypeError("Can only add FPNode as child")
+        if not child.item in self._children:
+            self._children[child.item] = child
+            child.parent = self
+
+    def search_child(self, item):
+        return self._children.get(item, None)
+
+    def remove_child(self, child):
+        try:
+            if self._children[child.item] is child:
+                del self._children[child.item]
+                child.parent = None
+                for sub_child in child.children:
+                    try:
+                        # Merger case: we already have a child for that item, so
+                        # add the sub-child's count to our child's count.
+                        self._children[sub_child.item]._count += sub_child.count
+                        sub_child.parent = None # it's an orphan now
+                    except KeyError:
+                        # Turns out we don't actually have a child, so just add
+                        # the sub-child as our own child.
+                        self.add_child(sub_child)
+                child._children = {}
+            else:
+                raise ValueError("given child node is not a child of this node")
+        except KeyError:
+            raise ValueError("given child node is not a child of this node")
+
+    def __contains__(self, item):
+        return item in self._children
+
+    @property
+    def item(self):
+        """The item contained in this node."""
+        return self._item
+
+    @property
+    def count(self):
+        """The count associated with this node's item."""
+        return self._count
+
+    def increment(self):
+        """Increments the count associated with this node's item."""
+        if self._count is None:
+            raise ValueError("Root nodes have no associated count.")
+        self._count += 1
+
+    @property
+    def root(self):
+        """True if this node is the root of a tree; false if otherwise."""
+        return self._item is None and self._count is None
+
+    @property
+    def leaf(self):
+        """True if this node is a leaf in the tree; false if otherwise."""
+        return len(self._children) == 0
+
+    def parent():
+        doc = "The node's parent."
+        def fget(self):
+            return self._parent
+        def fset(self, node):
+            if node is not None and not isinstance(node, FPNode):
+                raise TypeError("A node must have an FPNode as a parent.")
+            self._parent = node
+        return locals()
+    parent = property(**parent())
+
+    def neighbor():
+        doc = """
+        The node's neighbor; the one with the same value that is "to the right"
+        of it in the tree.
+        """
+        def fget(self):
+            return self._neighbor
+        def fset(self, node):
+            if node is not None and not isinstance(node, FPNode):
+                raise TypeError("A node must have an FPNode as a neighbor.")
+            self._neighbor = node
+        return locals()
+    neighbor = property(**neighbor())
+
+    @property
+    def children(self):
+        """The nodes that are children of this node."""
+        return tuple(self._children.itervalues())
+
+    def inspect(self, depth=0):
+        print ('  ' * depth) + repr(self)
+        for child in self.children:
+            child.inspect(depth + 1)
+
+    def __repr__(self):
+        if self.root:
+            return "<%s (root)>" % type(self).__name__
+        return "<%s %r (%r)>" % (type(self).__name__, self.item, self.count)
+
+class FPTree:
     """
-    Returns non empty subsets of arr
+    An FP tree.
+    This object may only store transaction items that are hashable (i.e., all
+    items must be valid as dictionary keys or set members).
     """
-    return chain(*[combinations(arr, i + 1) for i, a in enumerate(arr)])
+    def __init__(self):
+        # The root node of the tree.
+        self._root = FPNode(None, None)
+
+        # A dictionary mapping items to the head and tail (as pair) of a path of
+        # "neighbors" that will hit every node containing that item.
+        self._routes = dict()
+
+    @property
+    def root(self):
+        """The root node of the tree."""
+        return self._root
+
+    def add(self, transaction):
+        """
+        Adds a transaction to the tree.
+        """
+        point = self._root
+        for item in transaction:
+            next_point = point.search_child(item)
+            if next_point:
+                # There is already a node in this tree for the current
+                # transaction item; reuse it.
+                next_point.increment()
+            else:
+                # Create a new point and add it as a child of the point we're
+                # currently looking at.
+                next_point = FPNode(item)
+                point.add_child(next_point)
+
+                # Update the route of nodes that contain this item to include
+                # our new node.
+                self._update_route(next_point)
+            point = next_point
+
+    def _update_route(self, point):
+        """Add the given node to the route through all nodes for its item."""
+
+        route = self._routes.get(point.item, None)
+        # existing item
+        if route:
+            route[1].neighbor = point # route[1] is the tail
+            route[1] = point
+        # new item
+        else:
+            self._routes[point.item] = [point, point]
+
+    def items(self):
+        """
+        Generate one 2-tuples for each item represented in the tree. The first
+        element of the tuple is the item itself, and the second element is a
+        generator that will yield the nodes in the tree that belong to the item.
+        """
+        for item in self._routes.iterkeys():
+            yield (item, self.nodes(item))
+
+    def nodes(self, item):
+        """
+        Generates the sequence of nodes that contain the given item.
+        """
+
+        try:
+            node = self._routes[item][0]
+        except KeyError:
+            return
+
+        while node:
+            yield node
+            node = node.neighbor
+
+    def prefix_paths(self, item):
+        """Generates the prefix paths that end with the given item."""
+
+        def collect_path(node):
+            path = []
+            while node and not node.root:
+                path.append(node)
+                node = node.parent
+            path.reverse()
+            return path
+
+        return (collect_path(node) for node in self.nodes(item))
+
+    def inspect(self):
+        print 'Tree:'
+        self.root.inspect(1)
+
+        print
+        print 'Routes:'
+        for item, nodes in self.items():
+            print '  %r' % item
+            for node in nodes:
+                print '    %r' % node
+
+    def remove(self, node):
+        """Called when `node` is removed from the tree; performs cleanup."""
+        node.parent.remove(node)
+        head, tail = self._routes[node.item]
+        if node is head:
+            if node is tail or not node.neighbor:
+                # It was the sole node.
+                del self._routes[node.item]
+            else:
+                self._routes[node.item] = self.Route(node.neighbor, tail)
+        else:
+            for n in self.nodes(node.item):
+                if n.neighbor is node:
+                    n.neighbor = node.neighbor # skip over
+                    if node is tail:
+                        self._routes[node.item] = [head, n]
+                    break
+
 
 class FPGrowth:
     def __init__(self, sample, min_support):
-        self.minimum_support = min_support
+        self.size = len(sample)
+        self.minimum_support = self.size * min_support
         logging.info("Building FP tree started ...")
         raw_data_size = sys.getsizeof(sample)
         start_time = time.time()
@@ -28,7 +242,7 @@ class FPGrowth:
                      len(sample), time_elapsed, time_elapsed / len(sample), 100.0 * tree_size / raw_data_size)
 
     def _build_frequent_tree(self, sample):
-        support = defaultdict(lambda: 0) # mapping from items to their supports
+        support = defaultdict(int) # mapping from items to their supports
         processed_transactions = list()
         # Load the passed-in transactions and count the support that individual item have.
         for transaction in sample:
@@ -40,134 +254,14 @@ class FPGrowth:
         self.minimum_support *= len(sample)
 
         # Remove infrequent items from the item support dictionary.
-        self.freq_items = dict((item, support) for item, support in support.iteritems() if support > self.minimum_support)
-        # Build our FP-tree. Before any transactions can be added to the tree, they
-        # must be stripped of infrequent items and their surviving items must be
-        # sorted in decreasing order of frequency.
+        self.support = dict((item, support) for item, support in support.iteritems() if support > self.minimum_support)
+        # Filter and sort transaction by support
         def clean_transaction(transaction):
-            transaction = filter(lambda x: x in self.freq_items, transaction)
-            transaction.sort(key=lambda x: self.freq_items[x], reverse=True)
+            transaction = filter(lambda x: x in self.support, transaction)
+            transaction.sort(key=lambda x: self.support[x], reverse=True)
             return transaction
 
         self.fp_tree = FPTree()
+        # Scan input data
         for transaction in imap(clean_transaction, processed_transactions):
             self.fp_tree.add(transaction)
-
-    def _conditional_tree_from_paths(self, paths):
-        """
-        Builds a conditional FP-tree from the given prefix paths.
-        """
-        tree = FPTree()
-        condition_item = None
-        items = set()
-
-        # Import the nodes in the paths into the new tree. Only the counts of the
-        # leaf notes matter; the remaining counts will be reconstructed from the
-        # leaf counts.
-        for path in paths:
-            if condition_item is None:
-                condition_item = path[-1].item
-
-            point = tree.root
-            for node in path:
-                next_point = point.search(node.item)
-                if not next_point:
-                    # Add a new node to the tree.
-                    items.add(node.item)
-                    count = node.count if node.item == condition_item else 0
-                    next_point = FPNode(tree, node.item, count)
-                    point.add(next_point)
-                    tree.update_route(next_point)
-                point = next_point
-
-        assert condition_item is not None
-
-        # Calculate the counts of the non-leaf nodes.
-        for path in tree.prefix_paths(condition_item):
-            count = path[-1].count
-            for node in reversed(path[:-1]):
-                node._count += count
-
-        # Eliminate the nodes for any items that are no longer frequent.
-        for item in items:
-            support = sum(n.count for n in tree.nodes(item))
-            if support < self.minimum_support:
-                # Doesn't make the cut anymore
-                for node in tree.nodes(item):
-                    if node.parent is not None:
-                        node.parent.remove(node)
-
-        # Finally, remove the nodes corresponding to the item for which this
-        # conditional tree was generated.
-        for node in tree.nodes(condition_item):
-            if node.parent is not None: # the node might already be an orphan
-                node.parent.remove(node)
-
-        return tree
-
-    def find_with_suffix(self, tree, suffix):
-        """
-        Find frequent itemsets in the given transactions using FP-growth. This
-        function returns a generator instead of an eagerly-populated list of items.
-        The `transactions` parameter can be any iterable of iterables of items.
-        `minimum_support` should be an integer specifying the minimum number of
-        occurrences of an itemset for it to be accepted.
-        Each item must be hashable (i.e., it must be valid as a member of a
-        dictionary or a set).
-        If `include_support` is true, yield (itemset, support) pairs instead of
-        just the itemsets.
-        """
-        for item, nodes in tree.items():
-            support = sum(n.count for n in nodes)
-            if support > self.minimum_support and item not in suffix:
-                # New winner!
-                found_set = [item] + suffix
-                yield (tuple(found_set), support)
-
-                # Build a conditional tree and recursively search for frequent
-                # itemsets within it.
-                cond_tree = self._conditional_tree_from_paths(tree.prefix_paths(item))
-                for s in self.find_with_suffix(cond_tree, found_set):
-                    yield s # pass along the good news to our caller
-
-    def run(self):
-        # Search for frequent itemsets, and yield the results we find.
-        for itemset in self.find_with_suffix(self.fp_tree, []):
-            yield itemset
-
-def main():
-    from optparse import OptionParser
-    p = OptionParser(usage='%prog --help')
-    p.add_option('-c', '--minimum-confidence', dest='minconf', type='float',
-                 help='Minimum rule confidence (default: 0.85)')
-    p.add_option('-s', '--minimum-support', dest='minsup', type='float',
-                 help='Minimum itemset support (default: 0.15)')
-    p.set_defaults(minsup=2)
-    p.add_option('-f', '--file', dest='filename', type='string',
-        help='Data filename')
-    options, args = p.parse_args()
-
-    if not options.filename :
-        p.error('must provide the path to a data file to read')
-
-    f = open(options.filename)
-    logging.basicConfig(filename='frequent_pattern.log',
-                        format='%(levelname)s: %(asctime)s %(message)s',
-                        datefmt='%m/%d/%Y %H:%M:%S',
-                        level=logging.DEBUG)
-    try:
-        start_time = time.time()
-        transactions = f.read().splitlines()
-        fp_growth = FPGrowth(transactions, options.minsup)
-        logging.info("Mining frequent Pattern started")
-        freq_pattern = dict()
-        for item, support in fp_growth.run():
-            freq_pattern[item] = support
-            print "(%s : %d)" % (item, support)
-        end_time = time.time()
-        logging.info("Found %d frequent pattern with minimum support %f, time elapsed %.1f ms", len(freq_pattern), options.minsup, 1000.0 * (end_time - start_time))
-    finally:
-        f.close()
-
-if __name__ == '__main__':
-    main()
