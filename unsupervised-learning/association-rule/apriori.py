@@ -137,7 +137,7 @@ def main():
     optparser = OptionParser()
     optparser.add_option('-f', '--file',
                          dest='input',
-                         help='filename containing csv',
+                         help='input data filename',
                          default=None)
     optparser.add_option('-s', '--min_support',
                          dest='minS',
@@ -159,12 +159,12 @@ def main():
     start_time = time.time()
     input_file = None
     if options.input is None:
-            input_file = sys.stdin
+        input_file = sys.stdin
     elif options.input is not None:
-            input_file = load_data(options.input)
+        input_file = load_data(options.input)
     else:
-            print 'No dataset filename specified, system with exit\n'
-            sys.exit('System will exit')
+        print 'No dataset filename specified, system with exit\n'
+        sys.exit('System will exit')
     logging.info("Apriori Started ....")
     min_support = options.minS
     min_confidence = options.minC

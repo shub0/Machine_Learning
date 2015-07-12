@@ -1,4 +1,10 @@
 #! /usr/bin/python
+import sys
+import time
+from optparse import OptionParser
+from itertools import imap
+from collections import defaultdict
+import logging
 
 class FPNode:
     def __init__(self, item, count = 1):
@@ -247,7 +253,7 @@ class FPGrowth:
         # Load the passed-in transactions and count the support that individual item have.
         for transaction in sample:
             processed = list()
-            for item in transaction.strip(',').split(','):
+            for item in transaction:
                 support[item] += 1
                 processed.append(item)
             processed_transactions.append(processed)
@@ -326,3 +332,56 @@ class FPGrowth:
     def find_frequent_pattern(self):
         for result in self._find_pattern_with_support(self.fp_tree, []):
             yield result
+
+def load_data(fname):
+    file = open(fname, 'rU')
+    input_data = list()
+    for line in file:
+        line = line.strip().strip(',')                        # Remove trailing/leading comma
+        record = tuple(line.split(','))
+        input_data.append(record)
+    return input_data
+
+def main():
+    optparser = OptionParser()
+    optparser.add_option('-f', '--file',
+                         dest='input',
+                         help='input data filename',
+                         default=None)
+    optparser.add_option('-s', '--min_support',
+                         dest='minS',
+                         help='minimum support value',
+                         default=0.15,
+                         type='float')
+    optparser.add_option('-c', '--min_confidence',
+                         dest='minC',
+                         help='minimum confidence value',
+                         default=0.6,
+                         type='float')
+
+    (options, args) = optparser.parse_args()
+    logging.basicConfig(filename='fp_growth.log',
+                    format='%(levelname)s: %(asctime)s %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.DEBUG)
+
+    input_file = None
+    if options.input is None:
+        input_file = sys.stdin
+    elif options.input is not None:
+        input_data = load_data(options.input)
+    else:
+        print 'No dataset filename specified, system with exit\n'
+        sys.exit('System will exit')
+    logging.info("FP growth Started ....")
+    start_time = time.time()
+    min_support = options.minS
+    min_confidence = options.minC
+    fp_growth = FPGrowth(input_data, min_support)
+    frequent_pattern = fp_growth.find_frequent_pattern()
+    end_time = time.time()
+    time_elapsed = 1000.0 * (end_time - start_time)
+    logging.info("FP growth completed in %.1f ms, mined frequent pattern with minimum support %.4f" % (time_elapsed, min_support))
+
+if __name__ == "__main__":
+    main()
