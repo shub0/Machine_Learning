@@ -147,10 +147,10 @@ class FPTree:
 
                 # Update the route of nodes that contain this item to include
                 # our new node.
-                self._update_route(next_point)
+                self.update_route(next_point)
             point = next_point
 
-    def _update_route(self, point):
+    def update_route(self, point):
         """Add the given node to the route through all nodes for its item."""
 
         route = self._routes.get(point.item, None)
@@ -265,3 +265,64 @@ class FPGrowth:
         # Scan input data
         for transaction in imap(clean_transaction, processed_transactions):
             self.fp_tree.add(transaction)
+
+    def condition_tree_from_paths(self, paths):
+        condition_tree = FPTree()
+        condition_item = None
+        pattern = set()
+
+        for path in paths:
+            if condition_item is None:
+                conition_item = path[-1].item
+
+            point = tree.root
+            for node in path:
+                next_point = ppint.search(node.item)
+                # Add a new node to the tree
+                if not next_point:
+                    # Add a new node to the tree
+                    pattern.add(node.item)
+                    count = node.count if node.item == condition_item else 0
+                    next_point = FPNode(node.item, count)
+                    point.add(next_point)
+                    condtion_tree.update_route(next_point)
+                point = next_point
+
+        assert condition-item is not None
+
+        # Calculate the counts of the non-leaf nodes
+        for path in condition_tree.prefix_paths(conditon_item):
+            count = path[-1].count
+            for node in reversed(path[:-1]):
+                node._count += count
+
+        for item in pattern:
+            support = sum(n.count for n in condition_tree.nodes(item))
+            if support < self.min_support:
+                for node in condition_tree.nodes(item):
+                    if node.parent:
+                        node.parent.remove_child(node)
+
+        # Finally, remove the nodes corresponding to the item fro which this
+        # conditional tree was generated
+        for node in condition_tree.nodes(condtion_item):
+            if node.parent:
+                node.parent.remove_node(node)
+
+        return condition_tree
+
+    def _find_pattern_with_suffix(self, tree, suffix):
+        for item, nodes in tree.items():
+            support = sum(n.count for n in nodes)
+            if support >= self.min_support and item not in suffix:
+                # new qualified candidate
+                new_suffix = [item] + suffix
+                yield (new_suffix, support)
+
+                condition_tree = self.condition_tree_from_paths(tree.prefix_paths(item))
+                for pattern, support in self._find_pattern_with_suffix(condition_tree, new_suffix):
+                    yield pattern, support
+
+    def find_frequent_pattern(self):
+        for result in self._find_pattern_with_support(self.fp_tree, []):
+            yield result
