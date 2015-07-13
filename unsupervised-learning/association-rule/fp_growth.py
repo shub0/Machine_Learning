@@ -257,7 +257,6 @@ class FPGrowth:
                 support[item] += 1
                 processed.append(item)
             processed_transactions.append(processed)
-        self.minimum_support *= len(sample)
 
         # Remove infrequent items from the item support dictionary.
         self.support = dict((item, support) for item, support in support.iteritems() if support > self.minimum_support)
@@ -279,48 +278,48 @@ class FPGrowth:
 
         for path in paths:
             if condition_item is None:
-                conition_item = path[-1].item
+                condition_item = path[-1].item
 
-            point = tree.root
+            point = condition_tree.root
             for node in path:
-                next_point = ppint.search(node.item)
+                next_point = point.search_child(node.item)
                 # Add a new node to the tree
                 if not next_point:
                     # Add a new node to the tree
                     pattern.add(node.item)
                     count = node.count if node.item == condition_item else 0
                     next_point = FPNode(node.item, count)
-                    point.add(next_point)
-                    condtion_tree.update_route(next_point)
+                    point.add_child(next_point)
+                    condition_tree.update_route(next_point)
                 point = next_point
 
-        assert condition-item is not None
+        assert condition_item is not None
 
         # Calculate the counts of the non-leaf nodes
-        for path in condition_tree.prefix_paths(conditon_item):
+        for path in condition_tree.prefix_paths(condition_item):
             count = path[-1].count
             for node in reversed(path[:-1]):
                 node._count += count
 
         for item in pattern:
             support = sum(n.count for n in condition_tree.nodes(item))
-            if support < self.min_support:
+            if support < self.minimum_support:
                 for node in condition_tree.nodes(item):
                     if node.parent:
                         node.parent.remove_child(node)
 
         # Finally, remove the nodes corresponding to the item fro which this
         # conditional tree was generated
-        for node in condition_tree.nodes(condtion_item):
+        for node in condition_tree.nodes(condition_item):
             if node.parent:
-                node.parent.remove_node(node)
+                node.parent.remove_child(node)
 
         return condition_tree
 
     def _find_pattern_with_suffix(self, tree, suffix):
         for item, nodes in tree.items():
             support = sum(n.count for n in nodes)
-            if support >= self.min_support and item not in suffix:
+            if support >= self.minimum_support and item not in suffix:
                 # new qualified candidate
                 new_suffix = [item] + suffix
                 yield (new_suffix, support)
@@ -345,7 +344,7 @@ def load_data(fname):
 def main():
     optparser = OptionParser()
     optparser.add_option('-f', '--file',
-                         dest='input',
+                         dest='input_filename',
                          help='input data filename',
                          default=None)
     optparser.add_option('-s', '--min_support',
@@ -365,14 +364,7 @@ def main():
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.DEBUG)
 
-    input_file = None
-    if options.input is None:
-        input_file = sys.stdin
-    elif options.input is not None:
-        input_data = load_data(options.input)
-    else:
-        print 'No dataset filename specified, system with exit\n'
-        sys.exit('System will exit')
+    input_data = load_data(options.input_filename)
     logging.info("FP growth Started ....")
     start_time = time.time()
     min_support = options.minS
