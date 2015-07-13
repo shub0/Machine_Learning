@@ -330,7 +330,7 @@ class FPGrowth:
                     yield pattern, support
 
     def find_frequent_pattern(self):
-        for result in self._find_pattern_with_support(self.fp_tree, []):
+        for result in self._find_pattern_with_suffix(self.fp_tree, []):
             yield result
 
 def load_data(fname):
@@ -379,6 +379,8 @@ def main():
     min_confidence = options.minC
     fp_growth = FPGrowth(input_data, min_support)
     frequent_pattern = fp_growth.find_frequent_pattern()
+    for pattern, support in frequent_pattern:
+        print "(%s: %d)" % (pattern, support)
     end_time = time.time()
     time_elapsed = 1000.0 * (end_time - start_time)
     logging.info("FP growth completed in %.1f ms, mined frequent pattern with minimum support %.4f" % (time_elapsed, min_support))
