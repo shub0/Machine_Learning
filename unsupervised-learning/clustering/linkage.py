@@ -1,4 +1,7 @@
 # Linkage functions
+import unittest
+from functools import wraps
+
 def cached(fun):
     """
     memoizing decorator for linkage functions.
@@ -66,7 +69,8 @@ def average(a, b, distance_function):
     """
     distances = [distance_function(x, y)
                  for x in a for y in b]
-    return sum(distances) / len(distances)
+
+    return 1.0 * sum(distances) / len(distances)
 
 
 @cached
@@ -83,6 +87,36 @@ def uclus(a, b, distance_function):
                         for x in a for y in b])
     midpoint, rest = len(distances) // 2, len(distances) % 2
     if not rest:
-        return sum(distances[midpoint-1:midpoint+1]) / 2
+        return 1.0 * sum(distances[midpoint-1:midpoint+1]) / 2
     else:
-        return distances[midpoint]u
+        return distances[midpoint]
+
+class TestLinkageMethods(unittest.TestCase):
+
+    def setUp(self):
+        self.set_a = [1, 2, 3, 4]
+        self.set_b = [10, 11, 12, 13, 14, 15, 100]
+        self.dist = lambda x, y: abs(x-y)  # NOQA
+
+    def test_single_distance(self):
+        result = single(self.set_a, self.set_b, self.dist)
+        expected = 6
+        self.assertEqual(result, expected)
+
+    def test_complete_distance(self):
+        result = complete(self.set_a, self.set_b, self.dist)
+        expected = 99
+        self.assertEqual(result, expected)
+
+    def test_uclus_distance(self):
+        result = uclus(self.set_a, self.set_b, self.dist)
+        expected = 10.5
+        self.assertEqual(result, expected)
+
+    def test_average_distance(self):
+        result = average(self.set_a, self.set_b, self.dist)
+        expected = 22.5
+        self.assertEqual(result, expected)
+
+if __name__ == "__main__":
+    unittest.main()

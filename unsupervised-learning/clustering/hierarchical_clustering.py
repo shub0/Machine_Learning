@@ -5,6 +5,9 @@
 import linkage
 from functools import partial
 import logging
+from difflib import SequenceMatcher
+from sys import hexversion
+import unittest
 
 def flatten(container):
     """
@@ -112,7 +115,35 @@ class HierarchicalClustering:
             raise ValueError('distance method must be one of single, '
                              'complete, average of uclus')
 
-    def topology(self):
+    def _build_matrix(self, symmetric=False, diagonal=None):
+        matrix = list()
+        for row_index, row_item in enumerate(self._data):
+            logger.debug( "Generating row %s/%s (%.2f%%)", row_index, len(self._data), 100.0 * row_index / len(self._data) )
+            row = dict()
+            for col_index, col_item in enumerate(self._data):
+                if diagnonal is not None and col_index == row_index:
+                    row[col_index] = diagonal
+                elif symmetric and col_index < row_index:
+                    pass
+                else:
+                    if not hasattr(row_item, "__iter__"):
+                        row_item = [row_item]
+                    if not hasattr(col_item, "__iter__"):
+                        col_item = [col_item]
+                    row[col_index] = self.linkage(row_item, col_item)
+
+            if symmetric:
+                for col_index, col_item in enumerate(self._data):
+                    if col_index >= row_index:
+                        break
+                    row[col_index] = matrix[col_index][row_index]
+            row_indexed = [ row[index] for index in range(len(self._data)) ]
+            matrix.append(row_indexed)
+
+        logger.info("Matrix generation completed ...")
+        return matrix
+
+   def topology(self):
         return self.data[0].topology()
 
     def get_level(self, threshold):
@@ -131,7 +162,7 @@ class HierarchicalClustering:
         linkage = partial(self.linkage, distance_function = self.distance)
         inital_element_count = len(self._data)
         while len(martrix) > 2 or matrix == []:
-            matrix = self._build_matrix(self._data, linkage, True, 0)
+            matrix = self._build_matrix(True, 0)
             min_pair = None
             min_dist = None
             for row_index, row in enumerate(matrix):
@@ -155,3 +186,198 @@ class HierarchicalClustering:
     @property
     def raw_data(self):
         return self._input
+
+class Py23TestCase(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super(Py23TestCase, self).__init__(*args, **kwargs)
+        if hexversion < 0x030000f0:
+            self.assertCItemsEqual = self.assertItemsEqual
+        else:
+            self.assertCItemsEqual = self.assertCountEqual
+
+
+class HClusterSmallListTestCase(Py23TestCase):
+    """
+    Test for Bug #1516204
+    """
+
+    def testClusterLen1(self):
+        """
+        Testing if hierarchical clustering a set of length 1 returns a set of
+        length 1
+        """
+        cl = HierarchicalClustering([876], lambda x, y: abs(x - y))
+        self.assertCItemsEqual([876], cl.getlevel(40))
+
+    def testClusterLen0(self):
+        """
+        Testing if hierarchical clustering an empty list returns an empty list
+        """
+        cl = HierarchicalClustering([], lambda x, y: abs(x - y))
+        self.assertEqual([], cl.getlevel(40))
+
+
+class HClusterIntegerTestCase(Py23TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super(HClusterIntegerTestCase, self).__init__(*args, **kwargs)
+        if hexversion < 0x030000f0:
+            self.assertCItemsEqual = self.assertItemsEqual
+        else:
+            self.assertCItemsEqual = self.assertCountEqual
+
+    def setUp(self):
+        self.__data = [791, 956, 676, 124, 564, 84, 24, 365, 594, 940, 398,
+                       971, 131, 365, 542, 336, 518, 835, 134, 391]
+
+    def testSingleLinkage(self):
+        "Basic Hierarchical Clustering test with integers"
+        cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y))
+        result = cl.getlevel(40)
+
+        # sort the values to make the tests less prone to algorithm changes
+        result = [sorted(_) for _ in result]
+        self.assertCItemsEqual([
+            [24],
+            [336, 365, 365, 391, 398],
+            [518, 542, 564, 594],
+            [676],
+            [791],
+            [835],
+            [84, 124, 131, 134],
+            [940, 956, 971],
+        ], result)
+
+    def testCompleteLinkage(self):
+        "Basic Hierarchical Clustering test with integers"
+        cl = HierarchicalClustering(self.__data,
+                                    lambda x, y: abs(x - y),
+                                    linkage='complete')
+        result = cl.getlevel(40)
+
+        # sort the values to make the tests less prone to algorithm changes
+        result = sorted([sorted(_) for _ in result])
+
+        expected = [
+            [24],
+            [84],
+            [124, 131, 134],
+            [336, 365, 365],
+            [391, 398],
+            [518],
+            [542, 564],
+            [594],
+            [676],
+            [791],
+            [835],
+            [940, 956, 971],
+        ]
+        self.assertEqual(result, expected)
+
+    def testUCLUS(self):
+        "Basic Hierarchical Clustering test with integers"
+        cl = HierarchicalClustering(self.__data,
+                                    lambda x, y: abs(x - y),
+                                    linkage='uclus')
+        expected = [
+            [24],
+            [84],
+            [124, 131, 134],
+            [336, 365, 365, 391, 398],
+            [518, 542, 564],
+            [594],
+            [676],
+            [791],
+            [835],
+            [940, 956, 971],
+        ]
+        result = sorted([sorted(_) for _ in cl.getlevel(40)])
+        self.assertEqual(result, expected)
+
+    def testAverageLinkage(self):
+        cl = HierarchicalClustering(self.__data,
+                                    lambda x, y: abs(x - y),
+                                    linkage='average')
+        # TODO: The current test-data does not really trigger a difference
+        # between UCLUS and "average" linkage.
+        expected = [
+            [24],
+            [84],
+            [124, 131, 134],
+            [336, 365, 365, 391, 398],
+            [518, 542, 564],
+            [594],
+            [676],
+            [791],
+            [835],
+            [940, 956, 971],
+        ]
+        result = sorted([sorted(_) for _ in cl.getlevel(40)])
+        self.assertEqual(result, expected)
+
+    def testUnmodifiedData(self):
+        cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y))
+        new_data = []
+        [new_data.extend(_) for _ in cl.getlevel(40)]
+        self.assertEqual(sorted(new_data), sorted(self.__data))
+
+    def testMultiprocessing(self):
+        cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y),
+                                    num_processes=4)
+        new_data = []
+        [new_data.extend(_) for _ in cl.getlevel(40)]
+        self.assertEqual(sorted(new_data), sorted(self.__data))
+
+
+class HClusterStringTestCase(Py23TestCase):
+
+    def sim(self, x, y):
+        sm = SequenceMatcher(lambda x: x in ". -", x, y)
+        return 1 - sm.ratio()
+
+    def setUp(self):
+        self.__data = ("Lorem ipsum dolor sit amet consectetuer adipiscing "
+                       "elit Ut elit Phasellus consequat ultricies mi Sed "
+                       "congue leo at neque Nullam").split()
+
+    def testDataTypes(self):
+        "Test for bug #?"
+        cl = HierarchicalClustering(self.__data, self.sim)
+        for item in cl.getlevel(0.5):
+            self.assertEqual(
+                type(item), type([]),
+                "Every item should be a list!")
+
+    def testCluster(self):
+        "Basic Hierachical clustering test with strings"
+        self.skipTest('These values lead to non-deterministic results. '
+                      'This makes it untestable!')
+        cl = HierarchicalClustering(self.__data, self.sim)
+        self.assertEqual([
+            ['ultricies'],
+            ['Sed'],
+            ['Phasellus'],
+            ['mi'],
+            ['Nullam'],
+            ['sit', 'elit', 'elit', 'Ut', 'amet', 'at'],
+            ['leo', 'Lorem', 'dolor'],
+            ['congue', 'neque', 'consectetuer', 'consequat'],
+            ['adipiscing'],
+            ['ipsum'],
+        ], cl.getlevel(0.5))
+
+    def testUnmodifiedData(self):
+        cl = HierarchicalClustering(self.__data, self.sim)
+        new_data = []
+        [new_data.extend(_) for _ in cl.getlevel(0.5)]
+        self.assertEqual(sorted(new_data), sorted(self.__data))
+
+
+if __name__ == '__main__':
+    suite = unittest.TestSuite((
+        unittest.makeSuite(HClusterIntegerTestCase),
+        unittest.makeSuite(HClusterSmallListTestCase),
+        unittest.makeSuite(HClusterStringTestCase),
+    ))
+    unittest.TextTestRunner(verbosity=2).run(suite)
