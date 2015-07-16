@@ -5,10 +5,11 @@
 import linkage
 from functools import partial
 import logging
-from difflib import SequenceMatcher
-from sys import hexversion
 import unittest
+from sys import hexversion
+from difflib import SequenceMatcher
 
+logger = logging.getLogger(__name__)
 def flatten(container):
     """
     Completely flattens out a cluster and returns a one-dimensional set
@@ -72,7 +73,7 @@ class TopoCluster(object):
             return [flatten(self.items)]
         if isinstance(left, TopoCluster) and left.level <= threshold:
             if isinstance(right, TopoCluster):
-                return [flatten(left.items)] + right.getlevel(threshold)
+                return [flatten(left.items)] + right.get_level(threshold)
             else:
                 return [flatten(left.items)] + [[right]]
         elif isinstance(right, TopoCluster) and right.level <= threshold:
@@ -90,16 +91,13 @@ class TopoCluster(object):
         else:
             return [[left], [right]]
 
-logger = logging.getLogger(__name__)
 class HierarchicalClustering:
-    def __init__(self, data, distance_function, linkage="single", num_processes=1, process_callback = None):
+    def __init__(self, data, distance_function, linkage="single"):
         logger.info("Initializing HierarchicalClustering object with linkage")
         self.set_linkage_method(linkage)
-        self.num_process = num_processes
         self._input = data
         self._data = data[:]
         self.distance = distance_function
-        self.process_callback = process_callback
         self._cluster_created = False
 
     def set_linkage_method(self, method):
@@ -115,13 +113,14 @@ class HierarchicalClustering:
             raise ValueError('distance method must be one of single, '
                              'complete, average of uclus')
 
-    def _build_matrix(self, symmetric=False, diagonal=None):
+    @staticmethod
+    def build_matrix(data, linkage, distance, symmetric=False, diagonal=None):
         matrix = list()
-        for row_index, row_item in enumerate(self._data):
-            logger.debug( "Generating row %s/%s (%.2f%%)", row_index, len(self._data), 100.0 * row_index / len(self._data) )
+        for row_index, row_item in enumerate(data):
+            logger.debug( "Generating row %s/%s (%.2f%%)", row_index, len(data), 100.0 * row_index / len(data) )
             row = dict()
-            for col_index, col_item in enumerate(self._data):
-                if diagnonal is not None and col_index == row_index:
+            for col_index, col_item in enumerate(data):
+                if diagonal is not None and col_index == row_index:
                     row[col_index] = diagonal
                 elif symmetric and col_index < row_index:
                     pass
@@ -130,20 +129,20 @@ class HierarchicalClustering:
                         row_item = [row_item]
                     if not hasattr(col_item, "__iter__"):
                         col_item = [col_item]
-                    row[col_index] = self.linkage(row_item, col_item)
+                    row[col_index] = linkage(row_item, col_item, distance)
 
             if symmetric:
-                for col_index, col_item in enumerate(self._data):
+                for col_index, col_item in enumerate(data):
                     if col_index >= row_index:
                         break
                     row[col_index] = matrix[col_index][row_index]
-            row_indexed = [ row[index] for index in range(len(self._data)) ]
+            row_indexed = [ row[index] for index in range(len(data)) ]
             matrix.append(row_indexed)
 
         logger.info("Matrix generation completed ...")
         return matrix
 
-   def topology(self):
+    def topology(self):
         return self.data[0].topology()
 
     def get_level(self, threshold):
@@ -161,23 +160,23 @@ class HierarchicalClustering:
             matrix = []
         linkage = partial(self.linkage, distance_function = self.distance)
         inital_element_count = len(self._data)
-        while len(martrix) > 2 or matrix == []:
-            matrix = self._build_matrix(True, 0)
+        while len(matrix) > 2 or matrix == []:
+            matrix = HierarchicalClustering.build_matrix(self._data, self.linkage, self.distance, True, 0)
             min_pair = None
             min_dist = None
             for row_index, row in enumerate(matrix):
                 for col_index, col in enumerate(row):
                     # a new minimum found
-                    col_lt_min_dist = cell < min_dist if min_distance else False
-                    if ( (row_index != col_index) and (cell_lt_min_dist or min_pair is None) ):
+                    col_lt_min_dist = col < min_dist if min_dist else False
+                    if ( (row_index != col_index) and (col_lt_min_dist or min_pair is None) ):
                         min_pair = (row_index, col_index)
                         min_dist = col
 
             sequence += 1
             level = matrix[min_pair[0]][min_pair[1]]
-            cluster = TopoCluster(level, self._data[min_pair[0]], self._data[min_pair][1]]
-            self._data.remove(self._data[min_pair[0]])
-            self._data.remove(self._data[min_pair[1]])
+            cluster = TopoCluster(level, self._data[min_pair[0]], self._data[min_pair[1]])
+            self._data.remove(self._data[max(min_pair[0], min_pair[1])])
+            self._data.remove(self._data[min(min_pair[0], min_pair[1])])
             self._data.append(cluster)
 
     @property
@@ -196,26 +195,21 @@ class Py23TestCase(unittest.TestCase):
         else:
             self.assertCItemsEqual = self.assertCountEqual
 
-
 class HClusterSmallListTestCase(Py23TestCase):
-    """
-    Test for Bug #1516204
-    """
-
-    def testClusterLen1(self):
+    def testCluster(self):
         """
         Testing if hierarchical clustering a set of length 1 returns a set of
         length 1
         """
         cl = HierarchicalClustering([876], lambda x, y: abs(x - y))
-        self.assertCItemsEqual([876], cl.getlevel(40))
+        self.assertCItemsEqual([876], cl.get_level(40))
 
-    def testClusterLen0(self):
+    def testEmptyCluster(self):
         """
         Testing if hierarchical clustering an empty list returns an empty list
         """
         cl = HierarchicalClustering([], lambda x, y: abs(x - y))
-        self.assertEqual([], cl.getlevel(40))
+        self.assertEqual([], cl.get_level(40))
 
 
 class HClusterIntegerTestCase(Py23TestCase):
@@ -234,7 +228,7 @@ class HClusterIntegerTestCase(Py23TestCase):
     def testSingleLinkage(self):
         "Basic Hierarchical Clustering test with integers"
         cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y))
-        result = cl.getlevel(40)
+        result = cl.get_level(40)
 
         # sort the values to make the tests less prone to algorithm changes
         result = [sorted(_) for _ in result]
@@ -254,7 +248,7 @@ class HClusterIntegerTestCase(Py23TestCase):
         cl = HierarchicalClustering(self.__data,
                                     lambda x, y: abs(x - y),
                                     linkage='complete')
-        result = cl.getlevel(40)
+        result = cl.get_level(40)
 
         # sort the values to make the tests less prone to algorithm changes
         result = sorted([sorted(_) for _ in result])
@@ -292,7 +286,7 @@ class HClusterIntegerTestCase(Py23TestCase):
             [835],
             [940, 956, 971],
         ]
-        result = sorted([sorted(_) for _ in cl.getlevel(40)])
+        result = sorted([sorted(_) for _ in cl.get_level(40)])
         self.assertEqual(result, expected)
 
     def testAverageLinkage(self):
@@ -313,25 +307,16 @@ class HClusterIntegerTestCase(Py23TestCase):
             [835],
             [940, 956, 971],
         ]
-        result = sorted([sorted(_) for _ in cl.getlevel(40)])
+        result = sorted([sorted(_) for _ in cl.get_level(40)])
         self.assertEqual(result, expected)
 
-    def testUnmodifiedData(self):
+    def testRawData(self):
         cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y))
         new_data = []
-        [new_data.extend(_) for _ in cl.getlevel(40)]
+        [new_data.extend(_) for _ in cl.get_level(40)]
         self.assertEqual(sorted(new_data), sorted(self.__data))
-
-    def testMultiprocessing(self):
-        cl = HierarchicalClustering(self.__data, lambda x, y: abs(x - y),
-                                    num_processes=4)
-        new_data = []
-        [new_data.extend(_) for _ in cl.getlevel(40)]
-        self.assertEqual(sorted(new_data), sorted(self.__data))
-
 
 class HClusterStringTestCase(Py23TestCase):
-
     def sim(self, x, y):
         sm = SequenceMatcher(lambda x: x in ". -", x, y)
         return 1 - sm.ratio()
@@ -344,7 +329,7 @@ class HClusterStringTestCase(Py23TestCase):
     def testDataTypes(self):
         "Test for bug #?"
         cl = HierarchicalClustering(self.__data, self.sim)
-        for item in cl.getlevel(0.5):
+        for item in cl.get_level(0.5):
             self.assertEqual(
                 type(item), type([]),
                 "Every item should be a list!")
@@ -365,12 +350,12 @@ class HClusterStringTestCase(Py23TestCase):
             ['congue', 'neque', 'consectetuer', 'consequat'],
             ['adipiscing'],
             ['ipsum'],
-        ], cl.getlevel(0.5))
+        ], cl.get_level(0.5))
 
     def testUnmodifiedData(self):
         cl = HierarchicalClustering(self.__data, self.sim)
         new_data = []
-        [new_data.extend(_) for _ in cl.getlevel(0.5)]
+        [new_data.extend(_) for _ in cl.get_level(0.5)]
         self.assertEqual(sorted(new_data), sorted(self.__data))
 
 
