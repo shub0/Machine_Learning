@@ -84,13 +84,15 @@ class MiniSom:
             win - position of the winning neuron for x (array or tuple).
             t - iteration index
         """
+        # sigma and learning rate decrease with the same rule
         eta = self._decay_function(self.learning_rate, t, self.T)
-        sig = self._decay_function(self.sigma, t, self.T) # sigma and learning rate decrease with the same rule
-        g = self.neighborhood(win, sig)*eta # improves the performances
-        it = nditer(g, flags=['multi_index'])
+        sig = self._decay_function(self.sigma, t, self.T)
+        # improves the performances
+        grid = self.neighborhood(win, sig)
+        it = nditer(grid, flags=['multi_index'])
         while not it.finished:
             # eta * neighborhood_function * (x-w)
-            self.weights[it.multi_index] += g[it.multi_index]*(x-self.weights[it.multi_index])
+            self.weights[it.multi_index] += eta * grid[it.multi_index] * (x-self.weights[it.multi_index])
             # normalization
             self.weights[it.multi_index] = self.weights[it.multi_index] / fast_norm(self.weights[it.multi_index])
             it.iternext()
@@ -128,7 +130,8 @@ class MiniSom:
 
     def _init_T(self, num_iteration):
         """ Initializes the parameter T needed to adjust the learning rate """
-        self.T = num_iteration/2  # keeps the learning rate nearly constant for the first half of the iterations
+        # keeps the learning rate nearly constant for the first half of the iterations
+        self.T = num_iteration/2
 
     def distance_map(self):
         """ Returns the average distance map of the weights.
@@ -139,7 +142,7 @@ class MiniSom:
             for ii in range(it.multi_index[0]-1, it.multi_index[0]+2):
                 for jj in range(it.multi_index[1]-1, it.multi_index[1]+2):
                     if ii >= 0 and ii < self.weights.shape[0] and jj >= 0 and jj < self.weights.shape[1]:
-                        um[it.multi_index] += fast_norm(self.weights[ii, jj, :]-self.weights[it.multi_index])
+                        um[it.multi_index] += ( fast_norm(self.weights[ii, jj, :]-self.weights[it.multi_index]) )
             it.iternext()
         um = um/um.max()
         return um

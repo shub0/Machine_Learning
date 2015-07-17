@@ -33,9 +33,9 @@ t[target == 'virginica'] = 2
 markers = ['o','s','D']
 colors = ['r','g','b']
 for cnt,xx in enumerate(data):
- w = som.winner(xx) # getting the winner
- # palce a marker on the winning position for the sample xx
- plot(w[0]+.5,w[1]+.5,markers[t[cnt]],markerfacecolor='None',
-    markeredgecolor=colors[t[cnt]],markersize=12,markeredgewidth=2)
+    w = som.winner(xx) # getting the winner
+    # palce a marker on the winning position for the sample xx
+    plot(w[0]+.5,w[1]+.5,markers[t[cnt]],markerfacecolor='None',
+         markeredgecolor=colors[t[cnt]],markersize=12,markeredgewidth=2)
 axis([0,som.weights.shape[0],0,som.weights.shape[1]])
 show() # show the figure
