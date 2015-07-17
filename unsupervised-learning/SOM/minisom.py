@@ -31,10 +31,7 @@ class MiniSom:
         """
         if sigma >= x/2.0 or sigma >= y/2.0:
             warn('Warning: sigma is too high for the dimension of the map.')
-        if seed:
-            self.random_generator = random.RandomState(seed)
-        else:
-            self.random_generator = random.RandomState(seed)
+        self.random_generator = random.RandomState(seed)
         if decay_function:
             self._decay_function = decay_function
         else:
