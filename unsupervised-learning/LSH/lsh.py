@@ -29,7 +29,7 @@ class MinHashSignature(Signature):
 
         return [ hash_factory(_) for _ in range(self.dim) ]
 
-    def sign(self, object):
+    def sign(self, s):
         sig = [ float("inf") ] * self.dim
         for hash_idx, hash_fn in enumerate(self.hashes):
             sig[hash_idx] = min(hash_fn(value) for value in s)
